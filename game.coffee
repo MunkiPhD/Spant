@@ -568,28 +568,51 @@ class LevelManager
 			this.levels.push(new LevelThree(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg")))
 			this.current_level = this.levels.shift()
 			console.log "Levels length: " + this.levels.length
+			@level_changing = false
 		catch e
 			"Error in LevelManager constructor: " + e
 	
 	levels: []
 	current_level: null
-	level_changed: false
+	level_changing: false
+	level_change_end_time: null
 	
+	addEnemy: ->
+		#console.log @current_enemy_count + "    " + @level_manager.current_level.enemy_count
+		if @game.current_enemy_count >= @current_level.enemy_count
+			return true
+		if @game.lastEnemyAddedAt = null or (@game.timer.gameTime - @game.lastEnemyAddedAt) > 1
+			if Math.random() < 1/ 20 # this.current_level.speed
+				@game.addEntity(new Enemy(@game, @ctx))
+				@lastEnemyAddedAt = @game.timer.gameTime
+				@game.stats.enemies_seen += 1
+				@game.current_enemy_count += 1
+				@game.current_enemy_displayed += 1
+				
 	update: ->
 		try
-			if this.shouldChangeLevel()
-				console.log "Enemy count is greater than the levels..."
-				if @levels.length > 0
-					console.log "About to shift..."
-					@current_level = @levels.shift()
-					@game.current_enemy_count = 0
-					@game.background = @current_level.background
-				else
-					console.log "Game should be over"
-					@game.game_over = true
-				@level_changed = true
+			# if the level is changing, we're going to display the level info
+			if @level_changing
+				unless @game.timer.gameTime <= @level_change_end_time
+					@level_changing = false
 			else
-				@level_changed = false
+				this.addEnemy()
+				
+				if this.shouldChangeLevel()
+					# console.log "Enemy count is greater than the levels..."
+					if @levels.length > 0
+						console.log "About to shift..."
+						@current_level = @levels.shift()
+						@game.current_enemy_count = 0
+						@game.background = @current_level.background
+					else
+						console.log "Game should be over"
+						@game.game_over = true
+					@level_changing = true
+					@level_change_end_time = @game.timer.gameTime + 3
+					console.log "GameTime: #{@game.timer.gameTime} and EndTime: #{@level_change_end_time}"
+				else
+					@level_changing = false
 		catch e
 			alert "Error in LevelManager: " + e
 	
@@ -605,12 +628,12 @@ class LevelManager
 		
 			
 	draw: ->
-		unless @current_level is null
-			if @level_changed
-				#alert @level_changed
-				@ctx.font = "bold 16px Verdana"
+		unless @current_level is null or @game.game_over
+			if @level_changing
+				@ctx.font = "bold 26px Verdana"
 				@ctx.fillStyle = "#FFF"
-				@ctx.fillText(@current_level.title, 200, 200)
+				textSize = @ctx.measureText(@current_level.title)
+				@ctx.fillText(@current_level.title, (@ctx.canvas.width / 2) - (textSize.width / 2), @ctx.canvas.height / 2)
 			@current_level.draw()
 #
 # --------------------------------- Game Engine --------------------------------
@@ -763,21 +786,12 @@ class MyShooter extends GameEngine
 		if @is_paused
 			return true
 			
-		@addEnemy()
+		
 		@level_manager.update()
 		super
 	
 	addEnemy: ->
-		#console.log @current_enemy_count + "    " + @level_manager.current_level.enemy_count
-		if @current_enemy_count >= @level_manager.current_level.enemy_count
-			return true
-		if this.lastEnemyAddedAt = null or (this.timer.gameTime - this.lastEnemyAddedAt) > 1
-			if Math.random() < 1/ 20 # this.current_level.speed
-				this.addEntity(new Enemy(this, this.ctx))
-				this.lastEnemyAddedAt = this.timer.gameTime
-				this.stats.enemies_seen += 1
-				this.current_enemy_count += 1
-				this.current_enemy_displayed += 1
+	
 				
 	draw: ->
 		try
