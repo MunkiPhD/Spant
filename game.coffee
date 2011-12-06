@@ -2,13 +2,14 @@ console.log "at the top"
 
 $ = jQuery
 
+
 #
 # --------------------------------- Global Window -----------------------------------
 #
 window = exports ? this
 
 window.requestAnimFrame = (->
-	return window.requestAnimationFrame or 
+	return window.requestAnimationFrame or
 	window.webkitRequestAnimationFrame or window.mozRequestAnimationFrame or
 	window.oRequestAnimationFrame or window.msRequestAnimationFrame or ->
 		window.setTimeout(callback, 1000 / 60))()
@@ -112,18 +113,21 @@ class Animation
 		elapsedTime: 0
 	
 	drawFrame: (tick, ctx, x, y, scaleBy) ->
-		scaleBy = scaleBy || 1
-		@elapsedTime += tick
-		if this.loop
-			if this.isDone()
-				this.elapsedTime = 0
-		else if this.isDone()
-			return true
-		index = this.currentFrame()
-		locX = x - (this.frameWidth / 2) # * scaleBy
-		locY = y - (this.frameHeight / 2) # * scaleBy
-		#console.log "x: #{x}, y:#{y}. locX: #{locX} locY: #{locY}, scaleBy: #{scaleBy}"
-		ctx.drawImage(@spriteSheet, index * this.frameWidth, 0, this.frameWidth, this.frameHeight, locX, locY, this.frameWidth, this.frameHeight)
+		try
+			scaleBy = scaleBy || 1
+			@elapsedTime += tick
+			if this.loop
+				if this.isDone()
+					this.elapsedTime = 0
+			else if this.isDone()
+				return true
+			index = this.currentFrame()
+			locX = x - (this.frameWidth / 2) # * scaleBy
+			locY = y - (this.frameHeight / 2) # * scaleBy
+			#console.log "x: #{x}, y:#{y}. locX: #{locX} locY: #{locY}, scaleBy: #{scaleBy}"
+			ctx.drawImage(@spriteSheet, index * this.frameWidth, 0, this.frameWidth, this.frameHeight, locX, locY, this.frameWidth, this.frameHeight)
+		catch e
+			alert "In Animation.drawFrame: " + e
 		
 	currentFrame: ->
 		return Math.floor(this.elapsedTime / this.frameDuration)
@@ -147,7 +151,7 @@ class Entity
 	update: ->
 	outsideScreen: ->
 		try
-			returnVal = this.x < 0 or this.x > ctx.canvas.width or this.y < 0 or this.y > ctx.canvas.height
+			returnVal = this.x < 0 or this.x > @ctx.canvas.width or this.y < 0 or this.y > @ctx.canvas.height
 			return returnVal
 		catch e
 			alert e
@@ -246,15 +250,15 @@ class RestartButton extends Button
 		super
 			
 	draw: ->
-		ctx.fillStyle = @main_color
-		ctx.fillRect(@x, @y, @width, @height)
-		ctx.lineWidth = 2
-		ctx.strokeStyle = "#FFF"
-		ctx.strokeRect(@x, @y, @width, @height)
-		ctx.fillStyle = @secondary_color
-		ctx.font = "bold 26px Verdana"
+		@ctx.fillStyle = @main_color
+		@ctx.fillRect(@x, @y, @width, @height)
+		@ctx.lineWidth = 2
+		@ctx.strokeStyle = "#FFF"
+		@ctx.strokeRect(@x, @y, @width, @height)
+		@ctx.fillStyle = @secondary_color
+		@ctx.font = "bold 26px Verdana"
 		textSize = @ctx.measureText('Restart Game')
-		ctx.fillText(@text, (ctx.canvas.width / 2) - (textSize.width / 2) , @y + 30)
+		@ctx.fillText(@text, (@ctx.canvas.width / 2) - (textSize.width / 2) , @y + 30)
 		super
 		
 #
@@ -270,7 +274,7 @@ class GameStats
 # --------------------------------- Bullet ---------------------------------------------
 #
 class Bullet extends VisualEntity
-	constructor: (@ctx, @x, @y, @angle) ->
+	constructor: (@game, @ctx, @x, @y, @angle) ->
 		this.width = 3
 		this.height = 12
 		super
@@ -286,13 +290,16 @@ class Bullet extends VisualEntity
 			this.y -= @speed
 		
 	draw: ->
-		ctx.save()
-		#ctx.translate(this.x, this.y)
-		#ctx.rotate(@angle) 
-		#ctx.translate(-this.x, -this.y)
-		ctx.fillStyle = "#ffaa00"
-		ctx.fillRect(@x, @y - this.height, @width, @height)
-		ctx.restore()
+		try
+			@ctx.save()
+			#ctx.translate(this.x, this.y)
+			#ctx.rotate(@angle) 
+			#ctx.translate(-this.x, -this.y)
+			@ctx.fillStyle = "#ffaa00"
+			@ctx.fillRect(@x, @y - this.height, @width, @height)
+			@ctx.restore()
+		catch e
+			alert "Bullet.draw(): " + e
 #
 # --------------------------------- Bullet Explosion---------------------------------
 #
@@ -350,7 +357,7 @@ class BackgroundEntity extends VisualEntity
 class Enemy extends VisualEntity
 	constructor: (game, ctx) ->
 		rand = Math.random()
-		check = (Math.floor(rand*10)) % 2 
+		check = (Math.floor(rand*10)) % 2
 		varSpeed = rand + rand
 		#console.log varSpeed
 		if check is 0
@@ -414,20 +421,23 @@ class Enemy extends VisualEntity
 		return true
 			
 	draw: ->
-		ctx.save()
-		#ctx.translate(this.x, this.y)
-		#ctx.rotate(@angle) 
-		#ctx.translate(-this.x, -this.y)
-		#ctx.fillStyle = "#00FF00"
-		# we use negative height because we want it to draw upwards
-		#ctx.fillRect(@x, @y, @width, -@height)
-		ctx.drawImage(@sprite, @x, @y)
-		ctx.restore()
+		try
+			@ctx.save()
+			#ctx.translate(this.x, this.y)
+			#ctx.rotate(@angle) 
+			#ctx.translate(-this.x, -this.y)
+			#ctx.fillStyle = "#00FF00"
+			# we use negative height because we want it to draw upwards
+			#ctx.fillRect(@x, @y, @width, -@height)
+			@ctx.drawImage(@sprite, @x, @y)
+			@ctx.restore()
+		catch e
+			alert "Enemy.draw(): " + e
 #
 # --------------------------------- Player -------------------------------------------
 #
 class Player extends VisualEntity
-	constructor: (gameArg, ctxArg) ->
+	constructor: (game, ctx) ->
 		@x = 400
 		@y = 600
 		@sprite = ASSET_MANAGER.getAsset("images/ship1.png")
@@ -444,7 +454,7 @@ class Player extends VisualEntity
 	
 	shoot: (x, y) ->
 		try
-			game.entities.push(new Bullet(ctx, x, y, 0))
+			game.entities.push(new Bullet(@game, @ctx, x, y, 0))
 			game.stats.shots_fired += 1
 		catch e
 			alert e
@@ -618,13 +628,16 @@ class GameEngine
 	clockTick = null
 	
 	init: (ctx) ->
-		console.log "Initialized"
-		this.ctx = ctx
-		this.clockTick = this.timer.tick()
-		document.body.appendChild(@debug_stats.domElement)
+		try
+			console.log "Initialized"
+			this.ctx = ctx
+			this.clockTick = this.timer.tick()
+			document.body.appendChild(@debug_stats.domElement)
 		
-		# start listening to input
-		this.startInput()
+			# start listening to input
+			this.startInput()
+		catch e
+			alert "in GameEngine.init(): " + e
 		
 	addEntity: (entity) ->
 		this.entities.push(entity)
@@ -641,21 +654,21 @@ class GameEngine
 	
 	draw: (callback) ->
 		#console.log "Drawing..."
-		this.ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
-		this.ctx.save()
+		@ctx.save()
+		this.ctx.clearRect(0, 0, @ctx.canvas.width, @ctx.canvas.height)
 		for entity in this.entities
 			if entity.active
 				entity.draw()
 		if (callback)
 			callback(true)
-		this.ctx.restore()
-		
+		@ctx.restore()
+
 	start: ->
 		try
-			console.log("starting game");
-			that = this;
+			console.log("starting game")
+			that = this
 			(gameLoop = ->
-				that.loop();
+				that.loop()
 				requestAnimFrame(gameLoop, that.ctx.canvas))()
 		catch e
 			alert "Inside GameEngine.start(): #{e}"
@@ -667,7 +680,7 @@ class GameEngine
 			getXandY = (e) ->
 				x = e.clientX - that.ctx.canvas.getBoundingClientRect().left  #- (that.ctx.canvas.width/2)
 				y = e.clientY - that.ctx.canvas.getBoundingClientRect().top #- (that.ctx.canvas.height/2)
-				return {x: x, y: y}	
+				return {x: x, y: y}
 			this.ctx.canvas.addEventListener "click", (e) =>
 				that.click = getXandY(e)
 				e.stopPropagation()
@@ -724,7 +737,7 @@ class MyShooter extends GameEngine
 		
 		# Entities
 		this.player = new Player(this, this.ctx)
-		this.entities.push(this.player)	
+		this.entities.push(this.player)
 		$("#surface").css("cursor", "none")
 	
 	start: ->
@@ -774,7 +787,7 @@ class MyShooter extends GameEngine
 				return true
 			
 			#@background = @level_manager.current_level.background
-			super 
+			super
 			this.drawScore() # this needs to be put in as a callback
 			this.drawEnemyStats()
 			this.level_manager.draw()
@@ -816,25 +829,29 @@ class MyShooter extends GameEngine
 #
 # --------------------------------- Run Game Code ------------------------------
 #
+# It requires these variables to be set...
+ASSET_MANAGER = null
+game = null
+ctx = null
 try
+	$ ->
+		canvas = $("#surface")
+		ctx = canvas.get(0).getContext("2d")
 	
-	canvas = $("#surface")
-	ctx = canvas.get(0).getContext("2d")
-	
-	game = new MyShooter #GameEngine
-	ASSET_MANAGER = new AssetManager()
-	
-	ASSET_MANAGER.queueDownload("images/asteroid.png")
-	ASSET_MANAGER.queueDownload("images/asteroid2.png")
-	ASSET_MANAGER.queueDownload("images/explosion.png")
-	ASSET_MANAGER.queueDownload("images/ship1.png")
-	ASSET_MANAGER.queueDownload("images/space1.jpg")
-	ASSET_MANAGER.queueDownload("images/space2.jpg")
-	
-	ASSET_MANAGER.downloadAll =>
-		game.init(ctx)
-		game.start()
-		true
+		game = new MyShooter #GameEngine
+		ASSET_MANAGER = new AssetManager()
+		
+		ASSET_MANAGER.queueDownload("images/asteroid.png")
+		ASSET_MANAGER.queueDownload("images/asteroid2.png")
+		ASSET_MANAGER.queueDownload("images/explosion.png")
+		ASSET_MANAGER.queueDownload("images/ship1.png")
+		ASSET_MANAGER.queueDownload("images/space1.jpg")
+		ASSET_MANAGER.queueDownload("images/space2.jpg")
+		
+		ASSET_MANAGER.downloadAll =>
+			game.init(ctx)
+			game.start()
+			true
 catch e
 	alert e
 console.log "at the end"
