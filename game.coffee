@@ -39,6 +39,100 @@ class Timer
 		return gameDelta
 
 #
+# --------------------------------- Asset Manager ---------------------------------------------
+#
+class AssetManager
+	successCount: 0
+	errorCount: 0
+	cache: {}
+	downloadQueue: []
+	soundsQueue: []
+	
+	queueDownload: (path) ->
+		this.downloadQueue.push(path)
+	
+	queueSound: (id, path) ->
+		this.soundsQueue.push(id: id, path: path)
+		
+	downloadAll: (callback) =>
+		if this.downloadQueue.length is 0 and this.soundsQueue.length is 0
+			callback()
+		
+		#this.downloadSounds(callback)
+		
+		for item in this.downloadQueue
+			path = item
+			image = new Image()
+			that = this
+			image.addEventListener "load", ->
+				console.log this.src + " is loaded"
+				that.successCount += 1
+				if that.isDone()
+					callback()
+			, false
+			image.addEventListener "error", ->
+				that.errorCount += 1
+				if that.isDone()
+					callback()
+			, false
+			image.src = path
+			this.cache[path] = image
+	
+	downloadSounds: (callback) ->
+		true
+		
+	downloadSound: ->
+		true
+		
+	getSound: (path) ->
+		this.cache[path]
+		
+	getAsset: (path) ->
+		this.cache[path]
+		
+	isDone: ->
+		((this.downloadQueue.length + this.soundsQueue.length) == this.successCount + this.errorCount)
+		
+				
+	getImage: (filename) ->
+		image = new Image()
+		image.src = "images/" + filename
+		image
+
+#
+# --------------------------------- Animation -------------------------------------
+#
+class Animation
+	constructor: (@spriteSheet, @frameWidth, @frameDuration, @loop) ->
+		@frameHeight = this.spriteSheet.height
+		@totalTime = (this.spriteSheet.width / this.frameWidth) * this.frameDuration
+		@elapsedTime = 0
+		
+		totalTime: 0
+		elapsedTime: 0
+	
+	drawFrame: (tick, ctx, x, y, scaleBy) ->
+		scaleBy = scaleBy || 1
+		@elapsedTime += tick
+		if this.loop
+			if this.isDone()
+				this.elapsedTime = 0
+		else if this.isDone()
+			return true
+		index = this.currentFrame()
+		locX = x - (this.frameWidth / 2) # * scaleBy
+		locY = y - (this.frameHeight / 2) # * scaleBy
+		#console.log "x: #{x}, y:#{y}. locX: #{locX} locY: #{locY}, scaleBy: #{scaleBy}"
+		ctx.drawImage(@spriteSheet, index * this.frameWidth, 0, this.frameWidth, this.frameHeight, locX, locY, this.frameWidth, this.frameHeight)
+		
+	currentFrame: ->
+		return Math.floor(this.elapsedTime / this.frameDuration)
+		
+	isDone: ->
+		return (this.elapsedTime >= this.totalTime)
+		
+		
+#
 # --------------------------------- Entity ---------------------------------------------
 #
 class Entity
@@ -57,6 +151,20 @@ class Entity
 			return returnVal
 		catch e
 			alert e
+	
+	rotateAndCache: (image) ->
+		offScreenCanvas = document.createElement('canvas')
+		offScreenCtx = offScreenCanvas.getContext('2d')
+		
+		size = Math.max(image.width, image.height)
+		offScreenCanvas.width = size
+		offScreenCanvas.height = size
+		
+		offScreenCtx.translate(size/2, size/2)
+		offScreenCtx.rotate(Math.random() * 100 + Math.PI/2)
+		offScreenCtx.drawImage(image, -(image.width/2), -(image.height/2))
+		
+		return offScreenCanvas
 		
 	
 #
@@ -88,13 +196,23 @@ class Button extends VisualEntity
 	text: "Button"
 	main_color: "#FFAA00"
 	secondary_color: "#DDD"
+	lastMouseX: 0
+	lastMouseY: 0
 	
 	update: ->
+		unless game.mouse is null
+			@lastMouseX = game.mouse.x
+			@lastMouseY = game.mouse.y
+			#console.log @lastMouseX + "  " + @lastMouseY
+		
 		if @callback
 			@callback()
 		super
 	
 	draw: ->
+		#$("#surface").css("cursor", "crosshair")
+		if @lastMouseX >= @x and @lastMouseX <= (@x + @width) and @lastMouseY >= @y and @lastMouseY <= (@y + @height)
+			$("#surface").css("cursor", "pointer")
 		super
 				
 	wasClicked: ->
@@ -125,6 +243,7 @@ class RestartButton extends Button
 			this.removeFromWorld = true
 		else
 			@text = "Restart Game"
+		super
 			
 	draw: ->
 		ctx.fillStyle = @main_color
@@ -136,11 +255,12 @@ class RestartButton extends Button
 		ctx.font = "bold 26px Verdana"
 		textSize = @ctx.measureText('Restart Game')
 		ctx.fillText(@text, (ctx.canvas.width / 2) - (textSize.width / 2) , @y + 30)
+		super
 		
 #
 # --------------------------------- Stats ---------------------------------------------
 #	
-class Stats
+class GameStats
 	constructor: (@game) ->
 	
 	shots_fired: 0
@@ -173,23 +293,52 @@ class Bullet extends VisualEntity
 		ctx.fillStyle = "#ffaa00"
 		ctx.fillRect(@x, @y - this.height, @width, @height)
 		ctx.restore()
+#
+# --------------------------------- Bullet Explosion---------------------------------
+#
+class BulletExplosion extends VisualEntity
+	constructor: (@game, @ctx, @x, @y) ->
+		@sprite = ASSET_MANAGER.getAsset('images/explosion.png')
+		@animation = new Animation(this.sprite, 25, 0.025)
+		super
+		
+	sprite: null
+	animation: null
+	
+	scaleFactor: ->
+		return 1 + this.animation.currentFrame()
+		
+	update: ->
+		if this.animation.isDone()
+			this.removeFromWorld = true
+			return
+		super
+		
+	draw: ->
+		try
+			#console.log "Draw frame [#{@x}, #{@y}]"
+			this.animation.drawFrame(this.game.clockTick, @ctx, @x, @y, this.scaleFactor())
+			#@ctx.drawImage(this.animation.spriteSheet, @x, @y)
+			super
+		catch e
+			alert e
 
 #
 # --------------------------------- BackgroundEntity -----------------------------
 #			
 class BackgroundEntity extends VisualEntity
-	constructor: (@game, @ctx, source) ->
+	constructor: (@game, @ctx, @image) ->
 		try
-			@image = new Image()
-			@image.src = source.toString()
 			super @game, @ctx
 		catch e
 			alert "IN BackgroundEntity: " + e
 			
-	image: null
-	
 	draw: ->
-		@ctx.drawImage(@image, @x, @y)
+		try
+			#console.log @image.src
+			@ctx.drawImage(@image, @x, @y)
+		catch e
+			alert e
 		super
 		
 	update: ->
@@ -200,19 +349,32 @@ class BackgroundEntity extends VisualEntity
 #
 class Enemy extends VisualEntity
 	constructor: (game, ctx) ->
-		@x = Math.random() * ctx.canvas.width
-		@width = 20
-		@height = 20
+		rand = Math.random()
+		check = (Math.floor(rand*10)) % 2 
+		varSpeed = rand + rand
+		#console.log varSpeed
+		if check is 0
+			@sprite = this.rotateAndCache(ASSET_MANAGER.getAsset("images/asteroid.png"))
+			@speed = .8 + varSpeed
+		else
+			@sprite = this.rotateAndCache(ASSET_MANAGER.getAsset("images/asteroid2.png"))
+			@speed = 1.5 + varSpeed
+		#console.log "Speed: " + @speed
+		@width = @sprite.width
+		@height = @sprite.height
+		@x = rand * (ctx.canvas.width - @width)
 		super
 	
 	health: 10
 	speed: 2
+	sprite: null
 	
 	update: ->
 		if this.outsideScreen()
 			this.active = false
 			this.removeFromWorld = true
 			this.game.lives -= 1
+			this.game.current_enemy_displayed -= 1
 		else
 			@y += @speed
 		for entity in game.entities
@@ -221,6 +383,11 @@ class Enemy extends VisualEntity
 				entity.removeFromWorld = true
 				this.game.score += 10
 				this.game.current_enemy_displayed -= 1
+				try
+					#console.log "Adding a new BulletExplosion entity"
+					this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
+				catch e
+					alert e
 			
 	collisionDetected: (bullet) ->
 		# If a's bottom right x coordinate is less than b's top left x coordinate
@@ -251,9 +418,10 @@ class Enemy extends VisualEntity
 		#ctx.translate(this.x, this.y)
 		#ctx.rotate(@angle) 
 		#ctx.translate(-this.x, -this.y)
-		ctx.fillStyle = "#00FF00"
+		#ctx.fillStyle = "#00FF00"
 		# we use negative height because we want it to draw upwards
-		ctx.fillRect(@x, @y, @width, -@height) 
+		#ctx.fillRect(@x, @y, @width, -@height)
+		ctx.drawImage(@sprite, @x, @y)
 		ctx.restore()
 #
 # --------------------------------- Player -------------------------------------------
@@ -262,11 +430,17 @@ class Player extends VisualEntity
 	constructor: (gameArg, ctxArg) ->
 		@x = 400
 		@y = 600
-		@width = 32
-		@height = 32
+		@sprite = ASSET_MANAGER.getAsset("images/ship1.png")
+		@width = @sprite.width
+		@height = @sprite.height
+		@lastMouseX = ctx.canvas.width / 2
+		@lastMouseY = ctx.canvas.height / 2
 		super
 	
 	movement_speed: 7
+	sprite: null
+	lastMouseX: 0
+	lastMouseY: 0
 	
 	shoot: (x, y) ->
 		try
@@ -280,7 +454,7 @@ class Player extends VisualEntity
 			ctx.fillStyle = "#0000FF"
 			ctx.fillRect(@x, @y, @width, @height)
 			#console.log "#{@x} #{@y}"
-
+		ctx.drawImage(@sprite, @lastMouseX - @width/2, @lastMouseY - @height/2)
 	
 	update: ->
 		#console.log " - Updating Player"
@@ -297,18 +471,24 @@ class Player extends VisualEntity
 		
 		unless game.click is null
 			@shoot(game.click.x, game.click.y)
+		
+		unless game.mouse is null
+			@lastMouseX = game.mouse.x
+			@lastMouseY = game.mouse.y
+		
 
 #
 # --------------------------------- Level --------------------------------
 #
 class Level
-	constructor: (@game, @ctx) ->
-	
+	constructor: (@game, @ctx, @image) ->
+		@background = new BackgroundEntity(@game, @ctx, @image)
+		
 	title: "Level X"
 	speed: 60
 	enemy_count: 3
 	level_complete: false
-	background: new Image()
+	background: null
 	
 	update: ->
 		if @game.current_enemy_count >= @enemy_count
@@ -321,9 +501,10 @@ class Level
 		textWidth = @ctx.measureText(text).width
 		@ctx.fillText(text, @ctx.canvas.width - textWidth - 5, 20)
 
+
 class LevelOne extends Level
 	constructor: (@game, @ctx) ->
-		@background.src = "images/space1.jpg"
+		@background = ASSET_MANAGER.getAsset("images/space1.jpg")
 		@enemy_count = 5
 		super
 	
@@ -337,8 +518,7 @@ class LevelOne extends Level
 		super
 		
 class LevelTwo extends Level
-	constructor: (@game, @ctx) ->
-		@background.src = "images/space2.jpg"
+	constructor: (@game, @ctx, @image) ->
 		@enemy_count = 10
 		super
 	
@@ -352,8 +532,7 @@ class LevelTwo extends Level
 		super
 
 class LevelThree extends Level
-	constructor: (@game, @ctx) ->
-		@background.src = "images/space1.jpg"
+	constructor: (@game, @ctx, @image) ->
 		@enemy_count = 25
 		super
 	
@@ -374,9 +553,9 @@ class LevelManager
 		try
 			this.levels = []
 			console.log "init levels - Levels length: " + this.levels.length
-			this.levels.push(new LevelOne(@game, @ctx))
-			this.levels.push(new LevelTwo(@game, @ctx))
-			this.levels.push(new LevelThree(@game, @ctx))
+			this.levels.push(new LevelOne(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg")))
+			this.levels.push(new LevelTwo(@game, @ctx, ASSET_MANAGER.getAsset("images/space2.jpg")))
+			this.levels.push(new LevelThree(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg")))
 			this.current_level = this.levels.shift()
 			console.log "Levels length: " + this.levels.length
 		catch e
@@ -389,11 +568,12 @@ class LevelManager
 	update: ->
 		try
 			if this.shouldChangeLevel()
-				#console.log "Enemy count is greater than the levels..."
+				console.log "Enemy count is greater than the levels..."
 				if @levels.length > 0
 					console.log "About to shift..."
 					@current_level = @levels.shift()
 					@game.current_enemy_count = 0
+					@game.background = @current_level.background
 				else
 					console.log "Game should be over"
 					@game.game_over = true
@@ -432,7 +612,8 @@ class GameEngine
 	click: null
 	mouse: null
 	keypress: null
-	stats: new Stats()
+	stats: new GameStats()
+	debug_stats: new Stats()
 	timer: new Timer()
 	clockTick = null
 	
@@ -440,7 +621,8 @@ class GameEngine
 		console.log "Initialized"
 		this.ctx = ctx
 		this.clockTick = this.timer.tick()
-			
+		document.body.appendChild(@debug_stats.domElement)
+		
 		# start listening to input
 		this.startInput()
 		
@@ -505,6 +687,7 @@ class GameEngine
 		this.click = null
 		this.mouse = null
 		this.keypress = null
+		this.debug_stats.update()
 		#this.stats.update()	
 
 #
@@ -512,27 +695,28 @@ class GameEngine
 #
 class MyShooter extends GameEngine
 	lastEnemyAddedAt: null
-	lives: 1
+	lives: 10
 	score: 0
 	game_over: false
 	level_manager: null
 	current_enemy_count: 0
 	current_enemy_displayed: 0
 	is_paused: false
+	background: null
 	
 	pregameSetup: ->
 		this.is_paused = false
 		this.game_over = false
 		this.entities = []
-		this.lives = 1
+		this.lives = 10
 		this.score = 0
 		this.current_enemy_count = 0
 		this.current_enemy_displayed = 0
-		this.stats = new Stats()
+		this.stats = new GameStats()
 		# Load images
-		backgroundOne = new BackgroundEntity(this, this.ctx, "images/space1.jpg")
+		@background = new BackgroundEntity(this, this.ctx, ASSET_MANAGER.getAsset("images/space1.jpg"))
 		#backgroundOne.draw()
-		this.entities.push(backgroundOne)
+		this.entities.push(@background)
 		
 		# Level Manager
 		this.level_manager = null
@@ -541,7 +725,7 @@ class MyShooter extends GameEngine
 		# Entities
 		this.player = new Player(this, this.ctx)
 		this.entities.push(this.player)	
-	
+		$("#surface").css("cursor", "none")
 	
 	start: ->
 		this.pregameSetup()
@@ -549,6 +733,7 @@ class MyShooter extends GameEngine
 		
 	update: ->
 		if this.lives <= 0 or @game_over
+			$("#surface").css("cursor", "crosshair")
 			for entity in this.entities
 				unless entity instanceof BackgroundEntity
 					entity.active = false
@@ -574,7 +759,7 @@ class MyShooter extends GameEngine
 		if @current_enemy_count >= @level_manager.current_level.enemy_count
 			return true
 		if this.lastEnemyAddedAt = null or (this.timer.gameTime - this.lastEnemyAddedAt) > 1
-			if Math.random() < 1/ 60 # this.current_level.speed
+			if Math.random() < 1/ 20 # this.current_level.speed
 				this.addEntity(new Enemy(this, this.ctx))
 				this.lastEnemyAddedAt = this.timer.gameTime
 				this.stats.enemies_seen += 1
@@ -583,15 +768,16 @@ class MyShooter extends GameEngine
 				
 	draw: ->
 		try
+			#@background.draw()
 			if @is_paused
 				this.drawPauseScreen()
 				return true
-				
+			
+			#@background = @level_manager.current_level.background
 			super 
 			this.drawScore() # this needs to be put in as a callback
 			this.drawEnemyStats()
 			this.level_manager.draw()
-			
 			
 			if this.lives <= 0
 				this.drawGameOver()
@@ -631,12 +817,24 @@ class MyShooter extends GameEngine
 # --------------------------------- Run Game Code ------------------------------
 #
 try
+	
 	canvas = $("#surface")
 	ctx = canvas.get(0).getContext("2d")
 	
 	game = new MyShooter #GameEngine
-	game.init(ctx)
-	game.start()
+	ASSET_MANAGER = new AssetManager()
+	
+	ASSET_MANAGER.queueDownload("images/asteroid.png")
+	ASSET_MANAGER.queueDownload("images/asteroid2.png")
+	ASSET_MANAGER.queueDownload("images/explosion.png")
+	ASSET_MANAGER.queueDownload("images/ship1.png")
+	ASSET_MANAGER.queueDownload("images/space1.jpg")
+	ASSET_MANAGER.queueDownload("images/space2.jpg")
+	
+	ASSET_MANAGER.downloadAll =>
+		game.init(ctx)
+		game.start()
+		true
 catch e
 	alert e
 console.log "at the end"
