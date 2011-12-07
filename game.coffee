@@ -382,19 +382,23 @@ class Enemy extends VisualEntity
 			this.removeFromWorld = true
 			this.game.lives -= 1
 			this.game.current_enemy_displayed -= 1
+			# alert "decreasing enemy displayed by 1 in Enemy Update A, is now #{@game.current_enemy_displayed}"
 		else
 			@y += @speed
 		for entity in game.entities
 			if entity instanceof Bullet and this.collisionDetected(entity)
-				this.removeFromWorld = true
-				entity.removeFromWorld = true
-				this.game.score += 10
-				this.game.current_enemy_displayed -= 1
-				try
-					#console.log "Adding a new BulletExplosion entity"
-					this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
-				catch e
-					alert e
+				#make sure that the entities aren't slated to be removed from the world yet before we perform the necessary actions
+				if @removeFromWorld is false and entity.removeFromWorld is false 
+					this.removeFromWorld = true
+					entity.removeFromWorld = true
+					this.game.score += 10
+					this.game.current_enemy_displayed -= 1
+					# alert "decreasing enemy displayed by 1 in Enemy Update B, is now #{@game.current_enemy_displayed}"
+					try
+						#console.log "Adding a new BulletExplosion entity"
+						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
+					catch e
+						alert e
 			
 	collisionDetected: (bullet) ->
 		# If a's bottom right x coordinate is less than b's top left x coordinate
@@ -434,10 +438,45 @@ class Enemy extends VisualEntity
 		catch e
 			alert "Enemy.draw(): " + e
 #
+# --------------------------------- Weapon -------------------------------------------
+#
+class Weapon
+	constructor: (@game, @ctx) ->
+	
+	xOffset: 0
+	yOffset: 0
+	
+	shoot: (x, y, angle) ->
+		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y + @yOffset, 0))
+		@game.stats.shots_fired += 1
+	
+class Laser extends Weapon
+	constructor: (@game, @ctx) ->
+		@xOffset = 0
+		@yOffset = 0
+		super
+	
+	shoot: (x, y, angle) ->
+		super
+
+class DoubleLaser extends Weapon
+	constructor: (@game, @ctx) ->
+		@xOffset = 7
+		@yOffset = 12
+		super
+		
+	shoot: (x, y, angle) ->
+		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 0))
+		@game.entities.push(new Bullet(@game, @ctx, x - @xOffset, y - @yOffset, 0))
+		@game.stats.shots_fired += 1
+		#super(x, y, null)
+		#super(x - 2 * @xOffset, y - 2 * @yOffset, null)
+
+#
 # --------------------------------- Player -------------------------------------------
 #
 class Player extends VisualEntity
-	constructor: (game, ctx) ->
+	constructor: (@game, @ctx) ->
 		@x = 400
 		@y = 600
 		@sprite = ASSET_MANAGER.getAsset("images/ship1.png")
@@ -445,17 +484,24 @@ class Player extends VisualEntity
 		@height = @sprite.height
 		@lastMouseX = ctx.canvas.width / 2
 		@lastMouseY = ctx.canvas.height / 2
+		@weapons = []
+		@weapons.push(new Laser(@game, @ctx))
 		super
 	
 	movement_speed: 7
 	sprite: null
 	lastMouseX: 0
 	lastMouseY: 0
+	laser: null
+	weapons: []
 	
 	shoot: (x, y) ->
 		try
-			game.entities.push(new Bullet(@game, @ctx, x, y, 0))
-			game.stats.shots_fired += 1
+			for weapon in @weapons
+				weapon.shoot(x, y, null)
+			#@laser.shoot(x, y, null)
+			#game.entities.push(new Bullet(@game, @ctx, x, y, 0))
+			#game.stats.shots_fired += 1
 		catch e
 			alert e
 
@@ -500,6 +546,9 @@ class Level
 	level_complete: false
 	background: null
 	
+	init: ->
+		#@game.current_enemy_displayed = 0
+	
 	update: ->
 		if @game.current_enemy_count >= @enemy_count
 			this.level_complete = true
@@ -530,7 +579,14 @@ class LevelOne extends Level
 class LevelTwo extends Level
 	constructor: (@game, @ctx, @image) ->
 		@enemy_count = 10
-		super
+		
+	init: ->
+		try
+			@game.player.weapons = []
+			@game.player.weapons.push(new DoubleLaser(@game, @ctx))
+			super
+		catch e
+			alert "LevelTwo constructor: " + e
 	
 	title: "Level 2"
 	speed: 60
@@ -561,10 +617,11 @@ class LevelThree extends Level
 class EnemyManager
 	constructor: (@game, @ctx) ->
 	
+	lastEnemyAddedAt: null
+	
 	addEnemy: ->
 		#console.log @current_enemy_count + "    " + @level_manager.current_level.enemy_count
-	
-		if @game.lastEnemyAddedAt = null or (@game.timer.gameTime - @game.lastEnemyAddedAt) > 1
+		if @lastEnemyAddedAt = null or (@game.timer.gameTime - @lastEnemyAddedAt) > 1
 			if Math.random() < 1/ 20 # this.current_level.speed
 				@game.addEntity(new Enemy(@game, @ctx))
 				@lastEnemyAddedAt = @game.timer.gameTime
@@ -601,20 +658,23 @@ class LevelManager
 				unless @game.timer.gameTime <= @level_change_end_time
 					@level_changing = false
 			else
-				if @game.current_enemy_count < @current_level.enemy_count
+				if @game.current_enemy_count < @current_level.enemy_count 
 					@enemy_manager.addEnemy()
+					return true
 				
 				if this.shouldChangeLevel()
 					# console.log "Enemy count is greater than the levels..."
 					if @levels.length > 0
 						console.log "About to shift..."
 						@current_level = @levels.shift()
+						@current_level.init()
 						@game.current_enemy_count = 0
 						@game.background = @current_level.background
+						@level_changing = true
 					else
 						console.log "Game should be over"
 						@game.game_over = true
-					@level_changing = true
+					#@level_changing = true
 					@level_change_end_time = @game.timer.gameTime + 3
 					console.log "GameTime: #{@game.timer.gameTime} and EndTime: #{@level_change_end_time}"
 				else
@@ -628,6 +688,7 @@ class LevelManager
 			if @game.current_enemy_displayed > 0
 				return false
 			else
+				# alert "No more enemies displayed..."
 				return true
 		else
 			return false
@@ -736,7 +797,6 @@ class GameEngine
 # --------------------------------- MyShooter --------------------------------
 #
 class MyShooter extends GameEngine
-	lastEnemyAddedAt: null
 	lives: 10
 	score: 0
 	game_over: false
@@ -761,16 +821,17 @@ class MyShooter extends GameEngine
 		#backgroundOne.draw()
 		this.entities.push(@background)
 		
+		# Entities
+		this.player = new Player(this, this.ctx)
+		this.entities.push(this.player)
+		
 		# Enemy Manager
 		this.enemy_manager = new EnemyManager(this, this.ctx)
 		
 		# Level Manager
 		this.level_manager = null
 		this.level_manager = new LevelManager(this, this.ctx, @enemy_manager)
-		
-		# Entities
-		this.player = new Player(this, this.ctx)
-		this.entities.push(this.player)
+			
 		$("#surface").css("cursor", "none")
 	
 	start: ->
@@ -795,12 +856,9 @@ class MyShooter extends GameEngine
 		
 		if @is_paused
 			return true
-			
 		
 		@level_manager.update()
 		super
-	
-	addEnemy: ->
 	
 				
 	draw: ->
