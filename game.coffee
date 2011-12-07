@@ -556,10 +556,26 @@ class LevelThree extends Level
 		super
 		
 #
+# --------------------------------- Enemy Manager --------------------------------
+#
+class EnemyManager
+	constructor: (@game, @ctx) ->
+	
+	addEnemy: ->
+		#console.log @current_enemy_count + "    " + @level_manager.current_level.enemy_count
+	
+		if @game.lastEnemyAddedAt = null or (@game.timer.gameTime - @game.lastEnemyAddedAt) > 1
+			if Math.random() < 1/ 20 # this.current_level.speed
+				@game.addEntity(new Enemy(@game, @ctx))
+				@lastEnemyAddedAt = @game.timer.gameTime
+				@game.stats.enemies_seen += 1
+				@game.current_enemy_count += 1
+				@game.current_enemy_displayed += 1
+#
 # --------------------------------- LevelManager --------------------------------
 #
 class LevelManager
-	constructor: (@game, @ctx) ->
+	constructor: (@game, @ctx, @enemy_manager) ->
 		try
 			this.levels = []
 			console.log "init levels - Levels length: " + this.levels.length
@@ -577,18 +593,7 @@ class LevelManager
 	level_changing: false
 	level_change_end_time: null
 	
-	addEnemy: ->
-		#console.log @current_enemy_count + "    " + @level_manager.current_level.enemy_count
-		if @game.current_enemy_count >= @current_level.enemy_count
-			return true
-		if @game.lastEnemyAddedAt = null or (@game.timer.gameTime - @game.lastEnemyAddedAt) > 1
-			if Math.random() < 1/ 20 # this.current_level.speed
-				@game.addEntity(new Enemy(@game, @ctx))
-				@lastEnemyAddedAt = @game.timer.gameTime
-				@game.stats.enemies_seen += 1
-				@game.current_enemy_count += 1
-				@game.current_enemy_displayed += 1
-				
+			
 	update: ->
 		try
 			# if the level is changing, we're going to display the level info
@@ -596,7 +601,8 @@ class LevelManager
 				unless @game.timer.gameTime <= @level_change_end_time
 					@level_changing = false
 			else
-				this.addEnemy()
+				if @game.current_enemy_count < @current_level.enemy_count
+					@enemy_manager.addEnemy()
 				
 				if this.shouldChangeLevel()
 					# console.log "Enemy count is greater than the levels..."
@@ -739,6 +745,7 @@ class MyShooter extends GameEngine
 	current_enemy_displayed: 0
 	is_paused: false
 	background: null
+	enemy_manager: null
 	
 	pregameSetup: ->
 		this.is_paused = false
@@ -754,9 +761,12 @@ class MyShooter extends GameEngine
 		#backgroundOne.draw()
 		this.entities.push(@background)
 		
+		# Enemy Manager
+		this.enemy_manager = new EnemyManager(this, this.ctx)
+		
 		# Level Manager
 		this.level_manager = null
-		this.level_manager = new LevelManager(this, this.ctx)
+		this.level_manager = new LevelManager(this, this.ctx, @enemy_manager)
 		
 		# Entities
 		this.player = new Player(this, this.ctx)
