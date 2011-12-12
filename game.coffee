@@ -144,6 +144,7 @@ class Entity
 	
 	x: 0
 	y: 0
+	z: 0
 	active: true
 	removeFromWorld: false
 	
@@ -274,7 +275,7 @@ class GameStats
 # --------------------------------- Bullet ---------------------------------------------
 #
 class Bullet extends VisualEntity
-	constructor: (@game, @ctx, @x, @y, @angle) ->
+	constructor: (@game, @ctx, @x, @y, @angle, @color = "#ffaa00") ->
 		this.width = 3
 		this.height = 12
 		super
@@ -288,18 +289,28 @@ class Bullet extends VisualEntity
 		else
 			#this.x += @speed
 			this.y -= @speed
+			if @angle?
+				if @angle <= 90 and @angle > 0
+					this.x = @x + (@speed / Math.tan(90 - @angle))
+				if @angle <= 90 and @angle < 0
+					this.x = @x - (@speed / Math.tan(90 - Math.abs(@angle)))
+				#console.log @x
+			#@y = @speed * Math.sin(@angle)
+			
 		
 	draw: ->
 		try
 			@ctx.save()
-			#ctx.translate(this.x, this.y)
-			#ctx.rotate(@angle) 
-			#ctx.translate(-this.x, -this.y)
-			@ctx.fillStyle = "#ffaa00"
+			if @angle?
+				@ctx.translate(this.x, this.y)
+				@ctx.rotate(@angle * (Math.PI / 180)) 
+				@ctx.translate(-this.x, -this.y)
+			@ctx.fillStyle = @color
 			@ctx.fillRect(@x, @y - this.height, @width, @height)
 			@ctx.restore()
 		catch e
 			alert "Bullet.draw(): " + e
+		super
 #
 # --------------------------------- Bullet Explosion---------------------------------
 #
@@ -355,7 +366,7 @@ class BackgroundEntity extends VisualEntity
 # --------------------------------- Enemy -------------------------------------------
 #
 class Enemy extends VisualEntity
-	constructor: (game, ctx) ->
+	constructor: (game, ctx, speed_multiplier = 1) ->
 		rand = Math.random()
 		check = (Math.floor(rand*10)) % 2
 		varSpeed = rand + rand
@@ -367,6 +378,7 @@ class Enemy extends VisualEntity
 			@sprite = this.rotateAndCache(ASSET_MANAGER.getAsset("images/asteroid2.png"))
 			@speed = 1.5 + varSpeed
 		#console.log "Speed: " + @speed
+		@speed = @speed * speed_multiplier
 		@width = @sprite.width
 		@height = @sprite.height
 		@x = rand * (ctx.canvas.width - @width)
@@ -437,6 +449,56 @@ class Enemy extends VisualEntity
 			@ctx.restore()
 		catch e
 			alert "Enemy.draw(): " + e
+			
+#
+# --------------------------------- EnemyShip -------------------------------------------
+#
+class EnemyShipOne extends Enemy
+	constructor: (@game, @ctx) ->
+	
+		super
+		
+	update: ->
+		super
+		
+	draw: ->
+		super
+#
+# --------------------------------- Ship -------------------------------------------
+#
+class Ship extends VisualEntity
+	constructor: (@game, @ctx) ->
+		@weapons = []
+		@sprite = ASSET_MANAGER.getAsset("images/ship1.png")
+		@width = @sprite.width
+		@height = @sprite.height
+		super
+
+	weapons: []
+	sprite: null
+	movement_speed: 1
+	hp: 100
+	
+	setLocation: (x, y, z) ->
+		@x = x
+		@y = y
+		@z = z
+		
+	shoot: (x, y, angle) ->
+		for weapon in @weapons
+			weapon.shoot(x, y, angle)
+	
+	addWeapon: (weapon) ->
+		@weapons.push(weapon)
+	
+	
+	update: ->
+		
+		super
+		
+	draw: ->
+		ctx.drawImage(@sprite, @x - @width/2, @y - @height/2)
+		super
 #
 # --------------------------------- Weapon -------------------------------------------
 #
@@ -447,9 +509,12 @@ class Weapon
 	yOffset: 0
 	
 	shoot: (x, y, angle) ->
-		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y + @yOffset, 0))
+		#@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y + @yOffset, 0))
 		@game.stats.shots_fired += 1
-	
+
+#
+# --------------------------------- Laser-------------------------------------------
+#		
 class Laser extends Weapon
 	constructor: (@game, @ctx) ->
 		@xOffset = 0
@@ -457,8 +522,12 @@ class Laser extends Weapon
 		super
 	
 	shoot: (x, y, angle) ->
+		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y + @yOffset, 0, "#F3FA69"))
 		super
 
+#
+# --------------------------------- Double Laser-------------------------------------------
+#
 class DoubleLaser extends Weapon
 	constructor: (@game, @ctx) ->
 		@xOffset = 7
@@ -466,11 +535,26 @@ class DoubleLaser extends Weapon
 		super
 		
 	shoot: (x, y, angle) ->
-		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 0))
-		@game.entities.push(new Bullet(@game, @ctx, x - @xOffset, y - @yOffset, 0))
-		@game.stats.shots_fired += 1
+		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 10, "#96F3FA"))
+		@game.entities.push(new Bullet(@game, @ctx, x - @xOffset, y - @yOffset, -10, "#96F3FA"))
+		super
+		#@game.stats.shots_fired += 1
 		#super(x, y, null)
 		#super(x - 2 * @xOffset, y - 2 * @yOffset, null)
+
+#
+# --------------------------------- Side Laser -------------------------------------------
+#
+class SideLaser extends Weapon
+	constructor: (@game, @ctx) ->
+		@xOffset = 14
+		@yOffset = 16
+		super
+		
+	shoot: (x, y, angle) ->
+		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 0))
+		@game.entities.push(new Bullet(@game, @ctx, x - @xOffset, y - @yOffset, 0))
+		super
 
 #
 # --------------------------------- Player -------------------------------------------
@@ -479,13 +563,17 @@ class Player extends VisualEntity
 	constructor: (@game, @ctx) ->
 		@x = 400
 		@y = 600
-		@sprite = ASSET_MANAGER.getAsset("images/ship1.png")
-		@width = @sprite.width
-		@height = @sprite.height
+		#@sprite = ASSET_MANAGER.getAsset("images/ship1.png")
+		#@width = @sprite.width
+		#@height = @sprite.height
 		@lastMouseX = ctx.canvas.width / 2
 		@lastMouseY = ctx.canvas.height / 2
-		@weapons = []
-		@weapons.push(new Laser(@game, @ctx))
+		#@weapons = []
+		#@weapons.push(new Laser(@game, @ctx))
+		@ship = new Ship(@game, @ctx)
+		@ship.addWeapon(new Laser(@game, @ctx))
+		@ship.setLocation(@x, @y, null)
+		@game.addEntity(@ship)
 		super
 	
 	movement_speed: 7
@@ -494,23 +582,22 @@ class Player extends VisualEntity
 	lastMouseY: 0
 	laser: null
 	weapons: []
+	ship: null
 	
-	shoot: (x, y) ->
-		try
-			for weapon in @weapons
-				weapon.shoot(x, y, null)
-			#@laser.shoot(x, y, null)
-			#game.entities.push(new Bullet(@game, @ctx, x, y, 0))
-			#game.stats.shots_fired += 1
-		catch e
-			alert e
+	#shoot: (x, y, angle) ->
+	#	try
+	#		#for weapon in @weapons
+	#		#	weapon.shoot(x, y, null)
+	#		@ship.shoot(x, y, null)
+	#	catch e
+	#		alert e
 
 	draw: ->
 		unless game.keypress is null
 			ctx.fillStyle = "#0000FF"
 			ctx.fillRect(@x, @y, @width, @height)
 			#console.log "#{@x} #{@y}"
-		ctx.drawImage(@sprite, @lastMouseX - @width/2, @lastMouseY - @height/2)
+		#ctx.drawImage(@sprite, @lastMouseX - @width/2, @lastMouseY - @height/2)
 	
 	update: ->
 		#console.log " - Updating Player"
@@ -526,12 +613,14 @@ class Player extends VisualEntity
 		@y = window.clamp(@y, 0, @ctx.canvas.height - @height)
 		
 		unless game.click is null
-			@shoot(game.click.x, game.click.y)
+			#@shoot(game.click.x, game.click.y)
+			@ship.shoot(game.click.x, game.click.y)
 		
 		unless game.mouse is null
 			@lastMouseX = game.mouse.x
 			@lastMouseY = game.mouse.y
-		
+
+		@ship.setLocation(@lastMouseX, @lastMouseY, null)	
 
 #
 # --------------------------------- Level --------------------------------
@@ -545,7 +634,8 @@ class Level
 	enemy_count: 3
 	level_complete: false
 	background: null
-	
+	enemy_speed_multiplier: 1
+		
 	init: ->
 		#@game.current_enemy_displayed = 0
 	
@@ -568,7 +658,8 @@ class LevelOne extends Level
 		super
 	
 	title: "Level 1"
-	speed: 60
+	speed: 10
+
 		
 	update: ->
 		super
@@ -582,8 +673,8 @@ class LevelTwo extends Level
 		
 	init: ->
 		try
-			@game.player.weapons = []
-			@game.player.weapons.push(new DoubleLaser(@game, @ctx))
+			@game.player.ship.weapons = []
+			@game.player.ship.weapons.push(new DoubleLaser(@game, @ctx))
 			super
 		catch e
 			alert "LevelTwo constructor: " + e
@@ -600,17 +691,38 @@ class LevelTwo extends Level
 class LevelThree extends Level
 	constructor: (@game, @ctx, @image) ->
 		@enemy_count = 25
+		@enemy_speed_multiplier = 1.5
 		super
 	
 	title: "Level 3"
 	speed: 60
+	
+	init: ->
+		@game.player.ship.weapons.push(new SideLaser(@game, @ctx))
 		
 	update: ->
 		super
 	
 	draw: ->
 		super
+
+class LevelFour extends Level
+	constructor: (@game, @ctx, @image) ->
+		@enemy_count = 225
+		@enemy_speed_multiplier = 2
+		super
+	
+	title: "Level 4 Get Ready!"
+	speed: 10
+	
+	init: ->
+		#@game.player.ship.weapons.push(new SideLaser(@game, @ctx))
 		
+	update: ->
+		super
+	
+	draw: ->
+		super
 #
 # --------------------------------- Enemy Manager --------------------------------
 #
@@ -619,11 +731,11 @@ class EnemyManager
 	
 	lastEnemyAddedAt: null
 	
-	addEnemy: ->
+	addEnemy: (speed_multiplier)->
 		#console.log @current_enemy_count + "    " + @level_manager.current_level.enemy_count
 		if @lastEnemyAddedAt = null or (@game.timer.gameTime - @lastEnemyAddedAt) > 1
-			if Math.random() < 1/ 20 # this.current_level.speed
-				@game.addEntity(new Enemy(@game, @ctx))
+			if Math.random() < 1/  @game.level_manager.current_level.speed 
+				@game.addEntity(new Enemy(@game, @ctx, speed_multiplier))
 				@lastEnemyAddedAt = @game.timer.gameTime
 				@game.stats.enemies_seen += 1
 				@game.current_enemy_count += 1
@@ -639,6 +751,7 @@ class LevelManager
 			this.levels.push(new LevelOne(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg")))
 			this.levels.push(new LevelTwo(@game, @ctx, ASSET_MANAGER.getAsset("images/space2.jpg")))
 			this.levels.push(new LevelThree(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg")))
+			this.levels.push(new LevelFour(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg")))
 			this.current_level = this.levels.shift()
 			console.log "Levels length: " + this.levels.length
 			@level_changing = false
@@ -659,7 +772,7 @@ class LevelManager
 					@level_changing = false
 			else
 				if @game.current_enemy_count < @current_level.enemy_count 
-					@enemy_manager.addEnemy()
+					@enemy_manager.addEnemy(@current_level.enemy_speed_multiplier)
 					return true
 				
 				if this.shouldChangeLevel()
