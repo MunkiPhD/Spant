@@ -340,7 +340,34 @@ class BulletExplosion extends VisualEntity
 			super
 		catch e
 			alert e
-
+			
+#
+# --------------------------------- Ship Explosion---------------------------------
+#
+class ShipExplosion extends VisualEntity
+	constructor: (@game, @ctx, @x, @y) ->
+		@sprite = ASSET_MANAGER.getAsset('images/explosion_a.png')
+		@animation = new Animation(this.sprite, 64, 0.025)
+		super
+		
+	sprite: null
+	animation: null
+	
+	scaleFactor: ->
+		return 1 + this.animation.currentFrame()
+		
+	update: ->
+		if this.animation.isDone()
+			this.removeFromWorld = true
+			return
+		super
+		
+	draw: ->
+		try
+			this.animation.drawFrame(this.game.clockTick, @ctx, @x, @y, this.scaleFactor())
+			super
+		catch e
+			alert e
 #
 # --------------------------------- BackgroundEntity -----------------------------
 #			
@@ -400,6 +427,13 @@ class Enemy extends VisualEntity
 						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
 					catch e
 						alert e
+			if entity instanceof Ship and this.collisionDetected(entity)
+				#alert "collision detected"
+				if @removeFromWorld is false
+					this.removeFromWorld = true
+					this.game.current_enemy_displayed -= 1
+				this.game.addEntity(new ShipExplosion(this.game, this.ctx, entity.x, entity.y))
+				this.game.lives -= 1
 			
 	collisionDetected: (bullet) ->
 		# If a's bottom right x coordinate is less than b's top left x coordinate
@@ -485,6 +519,31 @@ class EnemyShipOne extends Enemy
 		
 	draw: ->
 		super
+
+#
+# --------------------------------- Enemy Manager --------------------------------
+#
+class EnemyManager
+	constructor: (@game, @ctx) ->
+	
+	lastEnemyAddedAt: null
+	
+	addEnemy: (speed_multiplier)->
+		#console.log @current_enemy_count + "    " + @level_manager.current_level.enemy_count
+		if @lastEnemyAddedAt = null or (@game.timer.gameTime - @lastEnemyAddedAt) > 1
+			if Math.random() < 1/@game.level_manager.current_level.speed
+				check = (Math.floor(Math.random()*10)) % 2
+				enemy = null
+				if check is 0
+					enemy = new AsteroidSmall(@game, @ctx, speed_multiplier)
+				else
+					enemy = new AsteroidLarge(@game, @ctx, speed_multiplier)
+				@game.addEntity(enemy) #new Enemy(@game, @ctx, speed_multiplier))
+				@lastEnemyAddedAt = @game.timer.gameTime
+				@game.stats.enemies_seen += 1
+				@game.current_enemy_count += 1
+				@game.current_enemy_displayed += 1
+				
 #
 # --------------------------------- Ship -------------------------------------------
 #
@@ -649,7 +708,7 @@ class Player extends VisualEntity
 #
 class Level
 	constructor: (@game, @ctx, @image) ->
-		#@background = new BackgroundEntity(@game, @ctx, @image)
+		@background = new BackgroundEntity(@game, @ctx, @image)
 		
 	title: "Level X"
 	speed: 60
@@ -676,7 +735,7 @@ class Level
 
 class LevelOne extends Level
 	constructor: (@game, @ctx, @image) ->
-		@background = new BackgroundEntity(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg"))
+		#@background = new BackgroundEntity(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg"))
 		@enemy_count = 5
 		super
 	
@@ -692,7 +751,7 @@ class LevelOne extends Level
 		
 class LevelTwo extends Level
 	constructor: (@game, @ctx, @image) ->
-		@background = new BackgroundEntity(@game, @ctx, ASSET_MANAGER.getAsset("images/space2.jpg"))
+		#@background = new BackgroundEntity(@game, @ctx, ASSET_MANAGER.getAsset("images/space2.jpg"))
 		@enemy_count = 10
 		
 	init: ->
@@ -714,7 +773,7 @@ class LevelTwo extends Level
 
 class LevelThree extends Level
 	constructor: (@game, @ctx, @image) ->
-		@background = new BackgroundEntiy(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg"))
+		#@background = new BackgroundEntiy(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg"))
 		@enemy_count = 25
 		@enemy_speed_multiplier = 1.5
 		super
@@ -733,7 +792,7 @@ class LevelThree extends Level
 
 class LevelFour extends Level
 	constructor: (@game, @ctx, @image) ->
-		@background = new BackgroundEntity(@game, @ctx, ASSET_MANAGER.getAsset("images/space2.jpg"))
+		#@background = new BackgroundEntity(@game, @ctx, ASSET_MANAGER.getAsset("images/space2.jpg"))
 		@enemy_count = 225
 		@enemy_speed_multiplier = 2
 		super
@@ -749,29 +808,7 @@ class LevelFour extends Level
 	
 	draw: ->
 		super
-#
-# --------------------------------- Enemy Manager --------------------------------
-#
-class EnemyManager
-	constructor: (@game, @ctx) ->
-	
-	lastEnemyAddedAt: null
-	
-	addEnemy: (speed_multiplier)->
-		#console.log @current_enemy_count + "    " + @level_manager.current_level.enemy_count
-		if @lastEnemyAddedAt = null or (@game.timer.gameTime - @lastEnemyAddedAt) > 1
-			if Math.random() < 1/@game.level_manager.current_level.speed
-				check = (Math.floor(Math.random()*10)) % 2
-				enemy = null
-				if check is 0
-					enemy = new AsteroidSmall(@game, @ctx, speed_multiplier)
-				else
-					enemy = new AsteroidLarge(@game, @ctx, speed_multiplier)
-				@game.addEntity(enemy) #new Enemy(@game, @ctx, speed_multiplier))
-				@lastEnemyAddedAt = @game.timer.gameTime
-				@game.stats.enemies_seen += 1
-				@game.current_enemy_count += 1
-				@game.current_enemy_displayed += 1
+
 #
 # --------------------------------- LevelManager --------------------------------
 #
@@ -781,11 +818,9 @@ class LevelManager
 			this.levels = []
 			console.log "init levels - Levels length: " + this.levels.length
 			this.levels.push(new LevelOne(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg")))
-			console.log "RRR1 Levels length: " + this.levels.length
 			this.levels.push(new LevelTwo(@game, @ctx, ASSET_MANAGER.getAsset("images/space2.jpg")))
 			this.levels.push(new LevelThree(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg")))
 			this.levels.push(new LevelFour(@game, @ctx, ASSET_MANAGER.getAsset("images/space2.jpg")))
-			console.log "RRR Levels length: " + this.levels.length
 			this.current_level = this.levels.shift()
 			@level_changing = false
 		catch e
@@ -815,8 +850,8 @@ class LevelManager
 						@current_level = @levels.shift()
 						@current_level.init()
 						@game.current_enemy_count = 0
-						@game.background = @current_level.background
-						console.log "CHANGING BACKGROUND: " + @current_level.background.image.src
+						#@game.background = @current_level.background
+						#console.log "CHANGING BACKGROUND: " + @current_level.background.image.src
 						@level_changing = true
 					else
 						console.log "Game should be over"
@@ -1006,10 +1041,6 @@ class MyShooter extends GameEngine
 		
 		@level_manager.update()
 
-		for entity in @entities
-			if entity instanceof BackgroundEntity
-				entity = @background
-				console.log entity.image.src
 		super
 	
 				
@@ -1078,6 +1109,7 @@ try
 		ASSET_MANAGER.queueDownload("images/asteroid.png")
 		ASSET_MANAGER.queueDownload("images/asteroid2.png")
 		ASSET_MANAGER.queueDownload("images/explosion.png")
+		ASSET_MANAGER.queueDownload("images/explosion_a.png")
 		ASSET_MANAGER.queueDownload("images/ship1.png")
 		ASSET_MANAGER.queueDownload("images/space1.jpg")
 		ASSET_MANAGER.queueDownload("images/space2.jpg")
