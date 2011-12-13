@@ -171,7 +171,17 @@ class Entity
 		
 		return offScreenCanvas
 		
-	
+	cache: (image) ->
+		offScreenCanvas = document.createElement('canvas')
+		offScreenCtx = offScreenCanvas.getContext('2d')
+		
+		size = Math.max(image.width, image.height)
+		offScreenCanvas.width = image.width
+		offScreenCanvas.height = image.height
+		
+		offScreenCtx.drawImage(image, 0, 0)
+		
+		return offScreenCanvas
 #
 # --------------------------------- Visual Entity -------------------------------------
 #
@@ -275,12 +285,13 @@ class GameStats
 # --------------------------------- Bullet ---------------------------------------------
 #
 class Bullet extends VisualEntity
-	constructor: (@game, @ctx, @x, @y, @angle, @color = "#ffaa00") ->
+	constructor: (@game, @ctx, @x, @y, @angle, @color = "#ffaa00", @damage) ->
 		this.width = 3
 		this.height = 12
 		super
 
 	speed: 7
+	damage: 1
 		
 	update: ->
 		if this.outsideScreen()
@@ -289,11 +300,18 @@ class Bullet extends VisualEntity
 		else
 			#this.x += @speed
 			this.y -= @speed
-			if @angle?
+			if @angle? and @angle > 0
+				@x = @x + Math.cos(@angle)
+			if @angle? and @angle < 0
+				@x = @x - Math.cos(-1 * @angle)
+				
+				
+				###
 				if @angle <= 90 and @angle > 0
 					this.x = @x + (@speed / Math.tan(90 - @angle))
 				if @angle <= 90 and @angle < 0
 					this.x = @x - (@speed / Math.tan(90 - Math.abs(@angle)))
+				###
 				#console.log @x
 			#@y = @speed * Math.sin(@angle)
 			
@@ -364,10 +382,39 @@ class ShipExplosion extends VisualEntity
 		
 	draw: ->
 		try
+			this.animation.drawFrame(this.game.clockTick, @ctx, @game.player.lastMouseX, @game.player.lastMouseY, this.scaleFactor())
+			super
+		catch e
+			alert e
+			
+#
+# --------------------------------- NonLethal Explosion---------------------------------
+#
+class NonLethalExplosion extends VisualEntity
+	constructor: (@game, @ctx, @x, @y) ->
+		@sprite = ASSET_MANAGER.getAsset('images/explosion_c.png')
+		@animation = new Animation(this.sprite, 64, 0.025)
+		super
+		
+	sprite: null
+	animation: null
+	
+	scaleFactor: ->
+		return 1 + this.animation.currentFrame()
+		
+	update: ->
+		if this.animation.isDone()
+			this.removeFromWorld = true
+			return
+		super
+		
+	draw: ->
+		try
 			this.animation.drawFrame(this.game.clockTick, @ctx, @x, @y, this.scaleFactor())
 			super
 		catch e
 			alert e
+			
 #
 # --------------------------------- BackgroundEntity -----------------------------
 #			
@@ -375,18 +422,33 @@ class BackgroundEntity extends VisualEntity
 	constructor: (@game, @ctx, @image) ->
 		try
 			super @game, @ctx
+			@internalY = @y
+			@sprite = this.cache(@image)
+			@sprite2 = this.cache(ASSET_MANAGER.getAsset("images/space2.jpg"))
 		catch e
 			alert "IN BackgroundEntity: " + e
-			
+	
+	internalY: 0
+	sprite2: null
+	
 	draw: ->
 		try
 			#console.log @image.src
-			@ctx.drawImage(@image, @x, @y)
+			@ctx.drawImage(@sprite, @x, @internalY - @sprite.height)
+			@ctx.drawImage(@sprite2, @x, @internalY)
 		catch e
 			alert e
 		super
 		
 	update: ->
+		if @game.lives > 0
+		#	console.log @game.game_over
+			@internalY += 2
+			if @internalY >= @ctx.canvas.height
+				@internalY = @y
+				temp = @sprite
+				@sprite = @sprite2
+				@sprite2 = temp
 		super
 
 #
@@ -400,7 +462,7 @@ class Enemy extends VisualEntity
 		@x = Math.random() * (ctx.canvas.width - @width)
 		super
 	
-	health: 10
+	hp: 10
 	speed: 2
 	sprite: null
 	
@@ -417,22 +479,23 @@ class Enemy extends VisualEntity
 			if entity instanceof Bullet and this.collisionDetected(entity)
 				#make sure that the entities aren't slated to be removed from the world yet before we perform the necessary actions
 				if @removeFromWorld is false and entity.removeFromWorld is false
-					this.removeFromWorld = true
-					entity.removeFromWorld = true
-					this.game.score += 10
-					this.game.current_enemy_displayed -= 1
-					# alert "decreasing enemy displayed by 1 in Enemy Update B, is now #{@game.current_enemy_displayed}"
-					try
-						#console.log "Adding a new BulletExplosion entity"
+					@hp = @hp - entity.damage # subtract the bullet damage from the current enemy's HP
+					entity.removeFromWorld = true # remove the bullet from the world
+					if @hp <= 0
+						this.removeFromWorld = true
+						this.game.score += 10
+						this.game.current_enemy_displayed -= 1
+						# alert "decreasing enemy displayed by 1 in Enemy Update B, is now #{@game.current_enemy_displayed}"
 						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
-					catch e
-						alert e
+					else
+						this.game.addEntity(new NonLethalExplosion(this.game, this.ctx, entity.x, entity.y))
 			if entity instanceof Ship and this.collisionDetected(entity)
 				#alert "collision detected"
 				if @removeFromWorld is false
 					this.removeFromWorld = true
 					this.game.current_enemy_displayed -= 1
-				this.game.addEntity(new ShipExplosion(this.game, this.ctx, entity.x, entity.y))
+				this.game.addEntity(new ShipExplosion(this.game, this.ctx, entity.x, entity.y)) # an explosion for hitting the ship
+				this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y)) # and an explosion for the asteroid destroyed
 				this.game.lives -= 1
 			
 	collisionDetected: (bullet) ->
@@ -483,6 +546,7 @@ class AsteroidSmall extends Enemy
 		rand = Math.random() * 2
 		@speed = 1.5 + rand
 		@sprite = this.rotateAndCache(ASSET_MANAGER.getAsset("images/asteroid.png"))
+		@hp = 1
 		super
 	
 	update: ->
@@ -499,6 +563,7 @@ class AsteroidLarge extends Enemy
 		rand = Math.random() * 2
 		@speed = .8 + rand
 		@sprite = this.rotateAndCache(ASSET_MANAGER.getAsset("images/asteroid2.png"))
+		@hp = 2
 		super
 	
 	update: ->
@@ -603,7 +668,7 @@ class Laser extends Weapon
 		super
 	
 	shoot: (x, y, angle) ->
-		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y + @yOffset, 0, "#F3FA69"))
+		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y + @yOffset, 0, "#F3FA69", 1))
 		super
 
 #
@@ -616,8 +681,8 @@ class DoubleLaser extends Weapon
 		super
 		
 	shoot: (x, y, angle) ->
-		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 10, "#96F3FA"))
-		@game.entities.push(new Bullet(@game, @ctx, x - @xOffset, y - @yOffset, -10, "#96F3FA"))
+		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 0, "#96F3FA", 1))
+		@game.entities.push(new Bullet(@game, @ctx, x  - @xOffset, y - @yOffset, 0, "#96F3FA", 1))
 		super
 		#@game.stats.shots_fired += 1
 		#super(x, y, null)
@@ -633,8 +698,10 @@ class SideLaser extends Weapon
 		super
 		
 	shoot: (x, y, angle) ->
-		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 0))
-		@game.entities.push(new Bullet(@game, @ctx, x - @xOffset, y - @yOffset, 0))
+		#@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 10))
+		#@game.entities.push(new Bullet(@game, @ctx, x - @xOffset, y - @yOffset, -10))
+		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 5, null, 1))
+		@game.entities.push(new Bullet(@game, @ctx, x - @xOffset, y - @yOffset, -5, null, 1))
 		super
 
 #
@@ -737,6 +804,7 @@ class LevelOne extends Level
 	constructor: (@game, @ctx, @image) ->
 		#@background = new BackgroundEntity(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg"))
 		@enemy_count = 5
+		#@game.player.ship.weapons.push(new SideLaser(@game, @ctx))
 		super
 	
 	title: "Level 1"
@@ -919,6 +987,8 @@ class GameEngine
 		for entity in this.entities
 			unless entity.removeFromWorld
 				entity.update()
+			else
+				entity = null
 		
 		# we only want to keep the entities we want in the world
 		this.entities = (entity for entity in this.entities when !entity.removeFromWorld)
@@ -1110,6 +1180,7 @@ try
 		ASSET_MANAGER.queueDownload("images/asteroid2.png")
 		ASSET_MANAGER.queueDownload("images/explosion.png")
 		ASSET_MANAGER.queueDownload("images/explosion_a.png")
+		ASSET_MANAGER.queueDownload("images/explosion_c.png")
 		ASSET_MANAGER.queueDownload("images/ship1.png")
 		ASSET_MANAGER.queueDownload("images/space1.jpg")
 		ASSET_MANAGER.queueDownload("images/space2.jpg")
