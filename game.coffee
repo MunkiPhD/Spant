@@ -293,6 +293,9 @@ class Bullet extends VisualEntity
 	width: 3
 	height: 12
 	color:  "#ffaa00"
+	
+	getRadians: (degrees) ->
+		degrees * (Math.PI/180)
 		
 	update: ->
 		if this.outsideScreen()
@@ -301,29 +304,17 @@ class Bullet extends VisualEntity
 		else
 			#this.x += @speed
 			this.y -= @speed
-			if @angle? and @angle > 0
-				@x = @x + Math.cos(@angle)
-			if @angle? and @angle < 0
-				@x = @x - Math.cos(-1 * @angle)
-				
-				
-				###
-				if @angle <= 90 and @angle > 0
-					this.x = @x + (@speed / Math.tan(90 - @angle))
-				if @angle <= 90 and @angle < 0
-					this.x = @x - (@speed / Math.tan(90 - Math.abs(@angle)))
-				###
-				#console.log @x
-			#@y = @speed * Math.sin(@angle)
-			
+			if @angle > 0 
+				@x = @x + (@speed / Math.tan(this.getRadians(@angle)))
+
 		
 	draw: ->
 		try
 			@ctx.save()
-			if @angle?
+			if @angle > 0
 				@ctx.translate(this.x, this.y)
-				@ctx.rotate(@angle * (Math.PI / 180)) 
-				@ctx.translate(-this.x, -this.y)
+				@ctx.rotate(this.getRadians(@angle)) 
+				@ctx.translate(-this.x, -this.y)			
 			@ctx.fillStyle = @color
 			@ctx.fillRect(@x, @y - this.height, @width, @height)
 			@ctx.restore()
@@ -574,14 +565,31 @@ class AsteroidLarge extends Enemy
 	draw: ->
 		super
 #
-# --------------------------------- EnemyShip -------------------------------------------
+# --------------------------------- EnemyShipOne -------------------------------------------
 #
 class EnemyShipOne extends Enemy
 	constructor: (@game, @ctx) ->
-	
+		@speed = 1
+		@sprite = this.cache(ASSET_MANAGER.getAsset("images/enemy_one.png"))
+		@hp = 3
+		@points = 5
 		super
 		
+	lastTimeFiredShot: null
+	
+	shotFired: (x, y, angle) ->
+		b = new Bullet(@game, @ctx, x, y, angle)
+		b.damage = 1
+		b.speed = 7
+		b.color = "#DDD" 
+		b.width = 3
+		b.height = 12
+		b
+		
 	update: ->
+		if @lastTimeFiredShot is null or @game.timer.gameTime - @lastTimeFiredShot
+			@game.entities.push(@shotFired(@x, @y, 45)) 
+			@lastTimeFiredShot = @game.timer.gameTime + 2
 		super
 		
 	draw: ->
@@ -599,12 +607,14 @@ class EnemyManager
 		#console.log @current_enemy_count + "    " + @level_manager.current_level.enemy_count
 		if @lastEnemyAddedAt = null or (@game.timer.gameTime - @lastEnemyAddedAt) > 1
 			if Math.random() < 1/@game.level_manager.current_level.speed
-				check = (Math.floor(Math.random()*10)) % 2
+				check = (Math.floor(Math.random()*10)) % 3
 				enemy = null
 				if check is 0
 					enemy = new AsteroidSmall(@game, @ctx, speed_multiplier)
-				else
+				else if check is 1
 					enemy = new AsteroidLarge(@game, @ctx, speed_multiplier)
+				else
+					enemy = new EnemyShipOne(@game, @ctx, speed_multiplier)
 				@game.addEntity(enemy) #new Enemy(@game, @ctx, speed_multiplier))
 				@lastEnemyAddedAt = @game.timer.gameTime
 				@game.stats.enemies_seen += 1
@@ -631,9 +641,9 @@ class Ship extends VisualEntity
 	
 	setModule: (moduleNumber, weapon) ->
 		switch moduleNumber
-			when 1 then weaponModuleOne = weapon
-			when 2 then weaponModuleTwo = weapon
-		#$("#module_info_#{moduleNumber}").html("Damage: {
+			when 1 then @weaponModuleOne = weapon
+			when 2 then @weaponModuleTwo = weapon
+		$("#module_info_#{moduleNumber}").html("#{weapon.description}")
 		
 	setLocation: (x, y, z) ->
 		@x = x
@@ -641,22 +651,11 @@ class Ship extends VisualEntity
 		@z = z
 		
 	shoot: (x, y, angle) ->
-		#console.log @weaponModuleOne
 		if @weaponModuleOne?
 			@weaponModuleOne.shoot(x, y, angle)
 		if @weaponModuleTwo?
 			@weaponModuleTwo.shoot(x, y, angle)
-		#for weapon in @weapons
-		#	weapon.shoot(x, y, angle)
-	
-	#addWeapon: (weapon) ->
-	#	@weapons.push(weapon)
-	#	console.log "Added #{weapon.name}"
-	
-	
-	update: ->
 		
-		super
 		
 	draw: ->
 		ctx.drawImage(@sprite, @x - @width/2, @y - @height/2)
@@ -672,7 +671,6 @@ class Weapon
 	yOffset: 0
 	
 	shoot: (x, y, angle) ->
-		#@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y + @yOffset, 0))
 		@game.stats.shots_fired += 1
 
 #
@@ -684,6 +682,8 @@ class Laser extends Weapon
 		@yOffset = 0
 		@name = "Laser"
 		super
+		
+	description: "The default weapon allowed. Normal damage and normal speed."
 	
 	shotFired: (x, y, angle) ->
 		b = new Bullet(@game, @ctx, x, y, angle)
@@ -711,6 +711,8 @@ class PowerLaser extends Weapon
 		@name = "Power Laser"
 		super
 	
+	description: "A slow but powerful laser."
+	
 	shotFired: (x, y, angle) ->
 		b = new Bullet(@game, @ctx, x, y, angle)
 		b.color = "#C40E20"
@@ -736,6 +738,8 @@ class DoubleLaser extends Weapon
 		@yOffset = 12
 		@name = "Double Laser"
 		super
+	
+	description: "Two lasers that fire straight and do normal damage"
 		
 	shotFired: (x, y, angle) ->
 		b = new Bullet(@game, @ctx, x, y, angle)
@@ -764,6 +768,8 @@ class SideLaser extends Weapon
 		@yOffset = 16
 		@name = "Side Lasers"
 		super
+	
+	description: "Two lasers that fire out the sides at a wider angle than straight on"
 
 	shotFired: (x, y, angle) ->
 		b = new Bullet(@game, @ctx, x, y, angle)
@@ -771,12 +777,12 @@ class SideLaser extends Weapon
 		b.damage = 1
 		b.speed = 7
 		b.width = 3
-		b.height = 10
+		b.height = 15
 		b
 		
 	shoot: (x, y, angle) ->
-		@game.entities.push(@shotFired(x + @xOffset, y - @yOffset, 6))
-		@game.entities.push(@shotFired(x - @xOffset, y - @yOffset, -6))
+		@game.entities.push(@shotFired(x + @xOffset, y - @yOffset, 60))
+		@game.entities.push(@shotFired(x - @xOffset, y - @yOffset, 120))
 		super
 
 	
@@ -789,21 +795,24 @@ class EnergyShot extends Weapon
 		@yOffset = 16
 		@name = "Energy Shot"
 		super
+	
+	description: "A scatter shot that does little damage but hits multiple targets"
 
 	shotFired: (x, y, angle) ->
 		b = new Bullet(@game, @ctx, x, y, angle)
 		b.color = "#0EC42F"
 		b.damage = 0.5
 		b.speed = 10
-		b.width = 2
-		b.height = 2
+		b.width = 3
+		b.height = 3
 		b
 		
 	shoot: (x, y, angle) ->
-		@game.entities.push(@shotFired(x + @xOffset, y - @yOffset, 5))
-		@game.entities.push(@shotFired(x - @xOffset, y - @yOffset, -5))
-		@game.entities.push(@shotFired(x + @xOffset + 1, y - @yOffset, 15))
-		@game.entities.push(@shotFired(x - @xOffset - 1, y - @yOffset, -15))
+		@game.entities.push(@shotFired(x + @xOffset + 1, y - @yOffset, 80))
+		@game.entities.push(@shotFired(x + @xOffset, y - @yOffset, 85))
+		@game.entities.push(@shotFired(x, y - @yOffset, 90))
+		@game.entities.push(@shotFired(x - @xOffset, y - @yOffset, 95))
+		@game.entities.push(@shotFired(x - @xOffset - 1, y - @yOffset, 100))
 		super
 
 #
@@ -817,7 +826,7 @@ class Player extends VisualEntity
 		@lastMouseY = ctx.canvas.height / 2
 		@ship = new Ship(@game, @ctx)
 		#@ship.addWeapon(new Laser(@game, @ctx))
-		@ship.weaponModuleOne = new Laser(@game, @ctx)
+		@ship.setModule(1, new Laser(@game, @ctx))
 		@ship.setLocation(@x, @y, null)
 		@game.addEntity(@ship)
 		super
@@ -910,7 +919,7 @@ class LevelOne extends Level
 
 	init: ->
 		$("#module_select_1").attr('disabled', 'disabled')
-		$("#module_select_2").attr('disabled', 'disabled')
+		#$("#module_select_2").attr('disabled', 'disabled')
 		console.log "Should have disabled..."
 		super
 		
@@ -1299,6 +1308,7 @@ try
 		#ASSET_MANAGER.queueDownload("images/space2.jpg")
 		#ASSET_MANAGER.queueDownload("images/black_space.jpg")
 		ASSET_MANAGER.queueDownload("images/black_space.png")
+		ASSET_MANAGER.queueDownload("images/enemy_one.png")
 		
 		ASSET_MANAGER.downloadAll =>
 			$("#loading").empty()
@@ -1317,14 +1327,14 @@ $("#module_select_1").change ->
 	#alert "changed"
 	console.log "Selected: #{$(this).val()} for WeaponModuleOne"
 	switch $(this).val()
-		when "1" then game.player.ship.weaponModuleOne = new Laser(game, ctx)
-		when "2" then game.player.ship.weaponModuleOne = new PowerLaser(game, ctx)
+		when "1" then game.player.ship.setModule(1, new Laser(game, ctx))
+		when "2" then game.player.ship.setModule(1, new PowerLaser(game, ctx))
 		
 $("#module_select_2").change ->
 	#alert "changed"
 	console.log "Selected: #{$(this).val()} for WeaponModuleTwo"
 	switch $(this).val()
-		when "1" then game.player.ship.weaponModuleTwo = new DoubleLaser(game, ctx)
-		when "2" then game.player.ship.weaponModuleTwo = new SideLaser(game, ctx)
-		when "3" then game.player.ship.weaponModuleTwo = new EnergyShot(game, ctx)
+		when "1" then game.player.ship.setModule(2, new DoubleLaser(game, ctx))
+		when "2" then game.player.ship.setModule(2, new SideLaser(game, ctx))
+		when "3" then game.player.ship.setModule(2, new EnergyShot(game, ctx))
 		
