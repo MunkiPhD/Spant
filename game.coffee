@@ -285,13 +285,14 @@ class GameStats
 # --------------------------------- Bullet ---------------------------------------------
 #
 class Bullet extends VisualEntity
-	constructor: (@game, @ctx, @x, @y, @angle, @color = "#ffaa00", @damage) ->
-		this.width = 3
-		this.height = 12
+	constructor: (@game, @ctx, @x, @y, @angle = 0) ->
 		super
 
 	speed: 7
 	damage: 1
+	width: 3
+	height: 12
+	color:  "#ffaa00"
 		
 	update: ->
 		if this.outsideScreen()
@@ -423,8 +424,12 @@ class BackgroundEntity extends VisualEntity
 		try
 			super @game, @ctx
 			@internalY = @y
-			@sprite = this.cache(@image)
-			@sprite2 = this.cache(ASSET_MANAGER.getAsset("images/space2.jpg"))
+			#@sprite = this.cache(@image)
+			#@sprite2 = this.cache(ASSET_MANAGER.getAsset("images/black_space.jpg"))
+			#@sprite = this.cache(ASSET_MANAGER.getAsset("images/space1.jpg"))
+			#@sprite2 = this.cache(ASSET_MANAGER.getAsset("images/space1.jpg"))
+			@sprite = this.cache(ASSET_MANAGER.getAsset("images/black_space.png"))
+			@sprite2 = this.cache(ASSET_MANAGER.getAsset("images/black_space.png"))
 		catch e
 			alert "IN BackgroundEntity: " + e
 	
@@ -444,6 +449,8 @@ class BackgroundEntity extends VisualEntity
 		if @game.lives > 0
 		#	console.log @game.game_over
 			@internalY += 2
+			if @internalY <= @sprite.height
+				return true
 			if @internalY >= @ctx.canvas.height
 				@internalY = @y
 				temp = @sprite
@@ -462,15 +469,18 @@ class Enemy extends VisualEntity
 		@x = Math.random() * (ctx.canvas.width - @width)
 		super
 	
-	hp: 10
+	hp: 1
 	speed: 2
 	sprite: null
+	points: 1
 	
 	update: ->
 		if this.outsideScreen()
 			this.active = false
 			this.removeFromWorld = true
-			this.game.lives -= 1
+			#this.game.lives -= 1
+			this.game.enemies_missed += 1
+			this.game.enemies_missed_points += (@points * 2)
 			this.game.current_enemy_displayed -= 1
 			# alert "decreasing enemy displayed by 1 in Enemy Update A, is now #{@game.current_enemy_displayed}"
 		else
@@ -483,7 +493,7 @@ class Enemy extends VisualEntity
 					entity.removeFromWorld = true # remove the bullet from the world
 					if @hp <= 0
 						this.removeFromWorld = true
-						this.game.score += 10
+						this.game.score += @points
 						this.game.current_enemy_displayed -= 1
 						# alert "decreasing enemy displayed by 1 in Enemy Update B, is now #{@game.current_enemy_displayed}"
 						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
@@ -508,16 +518,12 @@ class Enemy extends VisualEntity
 		# If a's bottom right y is less than b's top left y
 		#    There is no collision
 		if (this.x + this.width) <= (bullet.x)
-			#console.log "c1"
 			return false
 		if (this.x) >= (bullet.x + bullet.width)
-			#console.log "c2"
 			return false
 		if (this.y) >= (bullet.y + bullet.height)
-			#console.log "c3"
 			return false
 		if (this.y + this.height) <= (bullet.y)
-			#console.log "c4"
 			return false
 		# console.log "Item is at: [#{this.x}, #{this.y}] [#{this.x + this.width}.#{this.y + this.height}] 
 		# || Bullet is at: [#{bullet.x}, #{bullet.y}] [#{bullet.x + bullet.width}.#{bullet.y + bullet.height} ]"
@@ -526,12 +532,6 @@ class Enemy extends VisualEntity
 	draw: ->
 		try
 			@ctx.save()
-			#ctx.translate(this.x, this.y)
-			#ctx.rotate(@angle) 
-			#ctx.translate(-this.x, -this.y)
-			#ctx.fillStyle = "#00FF00"
-			# we use negative height because we want it to draw upwards
-			#ctx.fillRect(@x, @y, @width, -@height)
 			@ctx.drawImage(@sprite, @x, @y)
 			@ctx.restore()
 		catch e
@@ -547,6 +547,7 @@ class AsteroidSmall extends Enemy
 		@speed = 1.5 + rand
 		@sprite = this.rotateAndCache(ASSET_MANAGER.getAsset("images/asteroid.png"))
 		@hp = 1
+		@points = 1
 		super
 	
 	update: ->
@@ -564,6 +565,7 @@ class AsteroidLarge extends Enemy
 		@speed = .8 + rand
 		@sprite = this.rotateAndCache(ASSET_MANAGER.getAsset("images/asteroid2.png"))
 		@hp = 2
+		@points = 2
 		super
 	
 	update: ->
@@ -621,21 +623,35 @@ class Ship extends VisualEntity
 		super
 
 	weapons: []
+	weaponModuleOne: null
+	weaponModuleTwo: null
 	sprite: null
 	movement_speed: 1
 	hp: 100
 	
+	setModule: (moduleNumber, weapon) ->
+		switch moduleNumber
+			when 1 then weaponModuleOne = weapon
+			when 2 then weaponModuleTwo = weapon
+		#$("#module_info_#{moduleNumber}").html("Damage: {
+		
 	setLocation: (x, y, z) ->
 		@x = x
 		@y = y
 		@z = z
 		
 	shoot: (x, y, angle) ->
-		for weapon in @weapons
-			weapon.shoot(x, y, angle)
+		#console.log @weaponModuleOne
+		if @weaponModuleOne?
+			@weaponModuleOne.shoot(x, y, angle)
+		if @weaponModuleTwo?
+			@weaponModuleTwo.shoot(x, y, angle)
+		#for weapon in @weapons
+		#	weapon.shoot(x, y, angle)
 	
-	addWeapon: (weapon) ->
-		@weapons.push(weapon)
+	#addWeapon: (weapon) ->
+	#	@weapons.push(weapon)
+	#	console.log "Added #{weapon.name}"
 	
 	
 	update: ->
@@ -651,6 +667,7 @@ class Ship extends VisualEntity
 class Weapon
 	constructor: (@game, @ctx) ->
 	
+	name: "Weapon"
 	xOffset: 0
 	yOffset: 0
 	
@@ -665,11 +682,50 @@ class Laser extends Weapon
 	constructor: (@game, @ctx) ->
 		@xOffset = 0
 		@yOffset = 0
+		@name = "Laser"
 		super
 	
+	shotFired: (x, y, angle) ->
+		b = new Bullet(@game, @ctx, x, y, angle)
+		b.damage = 1
+		b.speed = 7
+		b.color = "#F3FA69" 
+		b.width = 3
+		b.height = 12
+		b
+		
 	shoot: (x, y, angle) ->
-		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y + @yOffset, 0, "#F3FA69", 1))
+		#@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y + @yOffset, 0,, 1))
+		@game.entities.push(@shotFired(x + @xOffset, y + @yOffset)) 
+		#new LaserBullet(@game, @ctx, x + @xOffset, y + @yOffset))
 		super
+		
+		
+#
+# --------------------------------- Power Laser-------------------------------------------
+#		
+class PowerLaser extends Weapon
+	constructor: (@game, @ctx) ->
+		@xOffset = 0
+		@yOffset = 0
+		@name = "Power Laser"
+		super
+	
+	shotFired: (x, y, angle) ->
+		b = new Bullet(@game, @ctx, x, y, angle)
+		b.color = "#C40E20"
+		b.damage = 3
+		b.speed = 3
+		b.width = 4
+		b.height = 10
+		b
+
+	shoot: (x, y, angle) ->
+		#bullet = new Bullet(@game, @ctx, x + @xOffset, y + @yOffset, 0, "#C40E20", 3)
+		#bullet.speed = 3
+		@game.entities.push(@shotFired(x + @xOffset, y + @yOffset, 0))
+		super
+
 
 #
 # --------------------------------- Double Laser-------------------------------------------
@@ -678,15 +734,26 @@ class DoubleLaser extends Weapon
 	constructor: (@game, @ctx) ->
 		@xOffset = 7
 		@yOffset = 12
+		@name = "Double Laser"
 		super
 		
+	shotFired: (x, y, angle) ->
+		b = new Bullet(@game, @ctx, x, y, angle)
+		b.color = "#F3FA69"
+		b.damage = 1
+		b.speed = 7
+		b.width = 3
+		b.height = 10
+		b
+		
 	shoot: (x, y, angle) ->
-		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 0, "#96F3FA", 1))
-		@game.entities.push(new Bullet(@game, @ctx, x  - @xOffset, y - @yOffset, 0, "#96F3FA", 1))
+		@game.entities.push(@shotFired(x + @xOffset, y - @yOffset, 0))
+		@game.entities.push(@shotFired(x  - @xOffset, y - @yOffset, 0))
 		super
 		#@game.stats.shots_fired += 1
 		#super(x, y, null)
 		#super(x - 2 * @xOffset, y - 2 * @yOffset, null)
+
 
 #
 # --------------------------------- Side Laser -------------------------------------------
@@ -695,13 +762,48 @@ class SideLaser extends Weapon
 	constructor: (@game, @ctx) ->
 		@xOffset = 14
 		@yOffset = 16
+		@name = "Side Lasers"
 		super
+
+	shotFired: (x, y, angle) ->
+		b = new Bullet(@game, @ctx, x, y, angle)
+		b.color = "#F3FA69"
+		b.damage = 1
+		b.speed = 7
+		b.width = 3
+		b.height = 10
+		b
 		
 	shoot: (x, y, angle) ->
-		#@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 10))
-		#@game.entities.push(new Bullet(@game, @ctx, x - @xOffset, y - @yOffset, -10))
-		@game.entities.push(new Bullet(@game, @ctx, x + @xOffset, y - @yOffset, 5, null, 1))
-		@game.entities.push(new Bullet(@game, @ctx, x - @xOffset, y - @yOffset, -5, null, 1))
+		@game.entities.push(@shotFired(x + @xOffset, y - @yOffset, 6))
+		@game.entities.push(@shotFired(x - @xOffset, y - @yOffset, -6))
+		super
+
+	
+#
+# --------------------------------- EnergyShot -------------------------------------------
+#
+class EnergyShot extends Weapon
+	constructor: (@game, @ctx) ->
+		@xOffset = 14
+		@yOffset = 16
+		@name = "Energy Shot"
+		super
+
+	shotFired: (x, y, angle) ->
+		b = new Bullet(@game, @ctx, x, y, angle)
+		b.color = "#0EC42F"
+		b.damage = 0.5
+		b.speed = 10
+		b.width = 2
+		b.height = 2
+		b
+		
+	shoot: (x, y, angle) ->
+		@game.entities.push(@shotFired(x + @xOffset, y - @yOffset, 5))
+		@game.entities.push(@shotFired(x - @xOffset, y - @yOffset, -5))
+		@game.entities.push(@shotFired(x + @xOffset + 1, y - @yOffset, 15))
+		@game.entities.push(@shotFired(x - @xOffset - 1, y - @yOffset, -15))
 		super
 
 #
@@ -711,15 +813,11 @@ class Player extends VisualEntity
 	constructor: (@game, @ctx) ->
 		@x = 400
 		@y = 600
-		#@sprite = ASSET_MANAGER.getAsset("images/ship1.png")
-		#@width = @sprite.width
-		#@height = @sprite.height
 		@lastMouseX = ctx.canvas.width / 2
 		@lastMouseY = ctx.canvas.height / 2
-		#@weapons = []
-		#@weapons.push(new Laser(@game, @ctx))
 		@ship = new Ship(@game, @ctx)
-		@ship.addWeapon(new Laser(@game, @ctx))
+		#@ship.addWeapon(new Laser(@game, @ctx))
+		@ship.weaponModuleOne = new Laser(@game, @ctx)
 		@ship.setLocation(@x, @y, null)
 		@game.addEntity(@ship)
 		super
@@ -810,12 +908,12 @@ class LevelOne extends Level
 	title: "Level 1"
 	speed: 10
 
+	init: ->
+		$("#module_select_1").attr('disabled', 'disabled')
+		$("#module_select_2").attr('disabled', 'disabled')
+		console.log "Should have disabled..."
+		super
 		
-	update: ->
-		super
-	
-	draw: ->
-		super
 		
 class LevelTwo extends Level
 	constructor: (@game, @ctx, @image) ->
@@ -824,8 +922,10 @@ class LevelTwo extends Level
 		
 	init: ->
 		try
-			@game.player.ship.weapons = []
-			@game.player.ship.weapons.push(new DoubleLaser(@game, @ctx))
+			#@game.player.ship.weapons = []
+			#@game.player.ship.weaponModuleTwo = new DoubleLaser(@game, @ctx)
+			$("#module_select_1").removeAttr('disabled')
+			console.log "Should have disabled..."
 			super
 		catch e
 			alert "LevelTwo constructor: " + e
@@ -833,11 +933,6 @@ class LevelTwo extends Level
 	title: "Level 2"
 	speed: 60
 		
-	update: ->
-		super
-	
-	draw: ->
-		super
 
 class LevelThree extends Level
 	constructor: (@game, @ctx, @image) ->
@@ -850,13 +945,10 @@ class LevelThree extends Level
 	speed: 60
 	
 	init: ->
-		@game.player.ship.weapons.push(new SideLaser(@game, @ctx))
-		
-	update: ->
+		#@game.player.ship.weaponModuleTwo = new SideLaser(@game, @ctx)
+		$("#module_select_2").removeAttr('disabled')
 		super
-	
-	draw: ->
-		super
+
 
 class LevelFour extends Level
 	constructor: (@game, @ctx, @image) ->
@@ -871,11 +963,19 @@ class LevelFour extends Level
 	init: ->
 		#@game.player.ship.weapons.push(new SideLaser(@game, @ctx))
 		
-	update: ->
+		
+class LevelFive extends Level
+	constructor: (@game, @ctx, @image) ->
+		@enemy_count = 500
+		@enemy_speed_multiplier = 2.5
 		super
 	
-	draw: ->
-		super
+	title: "Level 5: Insanity"
+	speed: 20
+	
+	init: ->
+
+
 
 #
 # --------------------------------- LevelManager --------------------------------
@@ -885,11 +985,12 @@ class LevelManager
 		try
 			this.levels = []
 			console.log "init levels - Levels length: " + this.levels.length
-			this.levels.push(new LevelOne(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg")))
-			this.levels.push(new LevelTwo(@game, @ctx, ASSET_MANAGER.getAsset("images/space2.jpg")))
-			this.levels.push(new LevelThree(@game, @ctx, ASSET_MANAGER.getAsset("images/space1.jpg")))
-			this.levels.push(new LevelFour(@game, @ctx, ASSET_MANAGER.getAsset("images/space2.jpg")))
+			this.levels.push(new LevelOne(@game, @ctx, null))
+			this.levels.push(new LevelTwo(@game, @ctx, null))
+			this.levels.push(new LevelThree(@game, @ctx, null))
+			this.levels.push(new LevelFour(@game, @ctx, null))
 			this.current_level = this.levels.shift()
+			this.current_level.init()
 			@level_changing = false
 		catch e
 			"Error in LevelManager constructor: " + e
@@ -1058,6 +1159,8 @@ class MyShooter extends GameEngine
 	is_paused: false
 	background: null
 	enemy_manager: null
+	enemies_missed: 0
+	enemies_missed_points: 0
 	
 	pregameSetup: ->
 		this.is_paused = false
@@ -1069,7 +1172,7 @@ class MyShooter extends GameEngine
 		this.current_enemy_displayed = 0
 		this.stats = new GameStats()
 		# Load images
-		@background = new BackgroundEntity(this, this.ctx, ASSET_MANAGER.getAsset("images/space1.jpg"))
+		@background = new BackgroundEntity(this, this.ctx, ASSET_MANAGER.getAsset("images/black_space.jpg"))
 		#backgroundOne.draw()
 		this.entities.push(@background)
 		
@@ -1138,24 +1241,29 @@ class MyShooter extends GameEngine
 		this.ctx.fillStyle ="white"
 		this.ctx.font = "bold 16px Verdana"
 		this.ctx.fillText("Shots Fired: #{this.stats.shots_fired}",  10, this.ctx.canvas.height - 10)
-		this.ctx.fillText("Score: #{this.score}",  10, this.ctx.canvas.height - 30)
+		this.ctx.fillText("Score: #{this.score} (-#{this.enemies_missed_points})",  10, this.ctx.canvas.height - 30)
 		this.ctx.fillText("Lives: #{this.lives}",  10, this.ctx.canvas.height - 50)
 	
 	drawEnemyStats: ->
 		this.ctx.fillStyle ="white"
 		this.ctx.font = "bold 16px Verdana"
-		this.ctx.fillText("Enemies: #{this.stats.enemies_seen}",  this.ctx.canvas.width - 195, this.ctx.canvas.height - 10)
-		this.ctx.fillText("Enemies Displayed: #{this.current_enemy_displayed}",  this.ctx.canvas.width - 195, this.ctx.canvas.height - 30)
+		this.ctx.fillText("Enemies: #{this.stats.enemies_seen}",  this.ctx.canvas.width - 195, this.ctx.canvas.height - 30)
+		this.ctx.fillText("Enemies Displayed: #{this.current_enemy_displayed}",  this.ctx.canvas.width - 195, this.ctx.canvas.height - 50)
+		this.ctx.fillText("Enemies Missed: #{this.enemies_missed}",  this.ctx.canvas.width - 195, this.ctx.canvas.height - 10)
 	
 	drawGameOver: ->
 		this.ctx.fillStyle = "white"
 		this.ctx.font = "bold 26px Verdana"
-		this.ctx.fillText("Game Over",  320, 300)
+		this.ctx.fillText("You Died.",  320, 270)
+		this.ctx.fillText("Score: #{this.score - this.enemies_missed_points}",  320, 300)
+		this.ctx.font = "bold 12px Verdana"
+		this.ctx.fillText("The end goal of life, is death.",  310, 370)
 		
 	drawPlayerWin: ->
 		this.ctx.fillStyle = "white"
 		this.ctx.font = "bold 26px Verdana"
-		this.ctx.fillText("You Win!",  320, 300)
+		this.ctx.fillText("You Survived!",  320, 300)
+		this.ctx.fillText("Score: #{this.score - this.enemies_missed_points}",  320, 280)
 	
 	drawPauseScreen: ->
 		this.ctx.fillStyle = "#FFF"
@@ -1168,24 +1276,32 @@ class MyShooter extends GameEngine
 ASSET_MANAGER = null
 game = null
 ctx = null
+
+
 try
 	$ ->
+		$("#module_1").html('<select id="module_select_1"><option value="1" selected="selected">Laser</option><option value="2">Power Laser</option>')
+		$("#module_2").html('<select id="module_select_2"><option value="1" selected="selected">Double Laser</option><option value="2">Side Laser</option><option value="3">Energy Shot</option>')
+		
 		canvas = $("#surface")
 		ctx = canvas.get(0).getContext("2d")
 	
+	
 		game = new MyShooter #GameEngine
 		ASSET_MANAGER = new AssetManager()
-		
 		ASSET_MANAGER.queueDownload("images/asteroid.png")
 		ASSET_MANAGER.queueDownload("images/asteroid2.png")
 		ASSET_MANAGER.queueDownload("images/explosion.png")
 		ASSET_MANAGER.queueDownload("images/explosion_a.png")
 		ASSET_MANAGER.queueDownload("images/explosion_c.png")
 		ASSET_MANAGER.queueDownload("images/ship1.png")
-		ASSET_MANAGER.queueDownload("images/space1.jpg")
-		ASSET_MANAGER.queueDownload("images/space2.jpg")
+		#ASSET_MANAGER.queueDownload("images/space1.jpg")
+		#ASSET_MANAGER.queueDownload("images/space2.jpg")
+		#ASSET_MANAGER.queueDownload("images/black_space.jpg")
+		ASSET_MANAGER.queueDownload("images/black_space.png")
 		
 		ASSET_MANAGER.downloadAll =>
+			$("#loading").empty()
 			game.init(ctx)
 			game.start()
 			true
@@ -1193,3 +1309,22 @@ catch e
 	alert e
 console.log "at the end"
 
+
+#
+# --------------------------------- Module Selection Code ------------------------------
+#
+$("#module_select_1").change ->
+	#alert "changed"
+	console.log "Selected: #{$(this).val()} for WeaponModuleOne"
+	switch $(this).val()
+		when "1" then game.player.ship.weaponModuleOne = new Laser(game, ctx)
+		when "2" then game.player.ship.weaponModuleOne = new PowerLaser(game, ctx)
+		
+$("#module_select_2").change ->
+	#alert "changed"
+	console.log "Selected: #{$(this).val()} for WeaponModuleTwo"
+	switch $(this).val()
+		when "1" then game.player.ship.weaponModuleTwo = new DoubleLaser(game, ctx)
+		when "2" then game.player.ship.weaponModuleTwo = new SideLaser(game, ctx)
+		when "3" then game.player.ship.weaponModuleTwo = new EnergyShot(game, ctx)
+		
