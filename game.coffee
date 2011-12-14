@@ -293,6 +293,7 @@ class Bullet extends VisualEntity
 	width: 3
 	height: 12
 	color:  "#ffaa00"
+	enemyFired: false
 	
 	getRadians: (degrees) ->
 		degrees * (Math.PI/180)
@@ -573,6 +574,7 @@ class EnemyShipOne extends Enemy
 		@sprite = this.cache(ASSET_MANAGER.getAsset("images/enemy_one.png"))
 		@hp = 3
 		@points = 5
+		@lastTimeFiredShot = @game.timer.gameTime + 1
 		super
 		
 	lastTimeFiredShot: null
@@ -580,16 +582,18 @@ class EnemyShipOne extends Enemy
 	shotFired: (x, y, angle) ->
 		b = new Bullet(@game, @ctx, x, y, angle)
 		b.damage = 1
-		b.speed = 7
+		b.speed = -7
 		b.color = "#DDD" 
 		b.width = 3
 		b.height = 12
+		b.enemyFired = true
 		b
 		
 	update: ->
-		if @lastTimeFiredShot is null or @game.timer.gameTime - @lastTimeFiredShot
-			@game.entities.push(@shotFired(@x, @y, 45)) 
-			@lastTimeFiredShot = @game.timer.gameTime + 2
+		if @lastTimeFiredShot is null or (@game.timer.gameTime - @lastTimeFiredShot) > 1
+			@game.entities.push(@shotFired(@x + @sprite.width / 2, @y+@sprite.height+12, 0)) 
+			@lastTimeFiredShot = @game.timer.gameTime + 1
+			@x = @x + Math.sin(@y)
 		super
 		
 	draw: ->
@@ -655,7 +659,6 @@ class Ship extends VisualEntity
 			@weaponModuleOne.shoot(x, y, angle)
 		if @weaponModuleTwo?
 			@weaponModuleTwo.shoot(x, y, angle)
-		
 		
 	draw: ->
 		ctx.drawImage(@sprite, @x - @width/2, @y - @height/2)
@@ -801,7 +804,7 @@ class EnergyShot extends Weapon
 	shotFired: (x, y, angle) ->
 		b = new Bullet(@game, @ctx, x, y, angle)
 		b.color = "#0EC42F"
-		b.damage = 0.5
+		b.damage = 0.45
 		b.speed = 10
 		b.width = 3
 		b.height = 3
