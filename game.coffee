@@ -170,6 +170,8 @@ class Entity
 	active: true
 	removeFromWorld: false
 	
+	hit: (entity) ->
+		#console.log "One hit is unhandled"
 	draw: ->
 	update: ->
 	
@@ -217,8 +219,7 @@ class VisualEntity extends Entity
 	height: 0
 	zindex: 0
 	
-	hit: (entity) ->
-		#console.log "One hit is unhandled"
+	
 		
 	draw: ->
 		if DEBUG is true
@@ -308,7 +309,35 @@ class GameStats
 	
 	shots_fired: 0
 	enemies_seen: 0
+
+#
+# --------------------------------- Animate Points ---------------------------------------------
+#
+class AnimatePoints extends Entity
+	constructor: (@game, @ctx, @entity, @color = "#50FF0A") ->
+		@x = @entity.x + @entity.width / 2
+		@y = @entity.y + @entity.height / 2
+		super
 	
+	counter: 0
+	removeFromWorld: false
+	x: 0
+	y: 0
+	
+	update: ->
+		if @counter < 20	
+			@x += 1
+			@y -= 1
+			@counter += 1
+		else
+			@removeFromWorld = true
+		super
+	
+	draw: ->
+		this.ctx.fillStyle = @color
+		this.ctx.font = "bold 14px Verdana"
+		this.ctx.fillText("+#{@entity.points}",  @x, @y)
+		super
 #
 # --------------------------------- Bullet ---------------------------------------------
 #
@@ -363,6 +392,36 @@ class BulletExplosion extends VisualEntity
 	constructor: (@game, @ctx, @x, @y) ->
 		@sprite = ASSET_MANAGER.getAsset('images/explosion.png')
 		@animation = new Animation(this.sprite, 25, 0.025)
+		super
+		
+	sprite: null
+	animation: null
+	
+	scaleFactor: ->
+		return 1 + this.animation.currentFrame()
+		
+	update: ->
+		if this.animation.isDone()
+			this.removeFromWorld = true
+			return
+		super
+		
+	draw: ->
+		try
+			#console.log "Draw frame [#{@x}, #{@y}]"
+			this.animation.drawFrame(this.game.clockTick, @ctx, @x, @y, this.scaleFactor())
+			#@ctx.drawImage(this.animation.spriteSheet, @x, @y)
+			super
+		catch e
+			alert e
+
+#
+# --------------------------------- Bullet Explosion---------------------------------
+#
+class GeneralExplosion extends VisualEntity
+	constructor: (@game, @ctx, @x, @y, image, size = 64, time = 0.025) ->
+		@sprite = image
+		@animation = new Animation(this.sprite, size, time)
 		super
 		
 	sprite: null
@@ -515,22 +574,6 @@ class Enemy extends VisualEntity
 			# alert "decreasing enemy displayed by 1 in Enemy Update A, is now #{@game.current_enemy_displayed}"
 		else
 			@y += @speed
-		###
-		for entity in game.entities
-			if entity instanceof Bullet and COLLISION.detected(this, entity)
-				#make sure that the entities aren't slated to be removed from the world yet before we perform the necessary actions
-				if @removeFromWorld is false and entity.removeFromWorld is false
-					@hp = @hp - entity.damage # subtract the bullet damage from the current enemy's HP
-					entity.removeFromWorld = true # remove the bullet from the world
-					if @hp <= 0
-						this.removeFromWorld = true
-						this.game.score += @points
-						this.game.current_enemy_displayed -= 1
-						# alert "decreasing enemy displayed by 1 in Enemy Update B, is now #{@game.current_enemy_displayed}"
-						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
-					else
-						this.game.addEntity(new NonLethalExplosion(this.game, this.ctx, entity.x, entity.y))
-		###
 		super
 
 	draw: ->
@@ -565,6 +608,7 @@ class AsteroidSmall extends Enemy
 						this.game.score += @points
 						this.game.current_enemy_displayed -= 1
 						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
+						this.game.addEntity(new AnimatePoints(@game, @ctx, this))
 					else
 						this.game.addEntity(new NonLethalExplosion(this.game, this.ctx, entity.x, entity.y))
 		if entity instanceof Ship
@@ -598,6 +642,7 @@ class AsteroidLarge extends Enemy
 						this.game.score += @points
 						this.game.current_enemy_displayed -= 1
 						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
+						this.game.addEntity(new AnimatePoints(@game, @ctx, this))
 					else
 						this.game.addEntity(new NonLethalExplosion(this.game, this.ctx, entity.x, entity.y))
 		if entity instanceof Ship
@@ -631,7 +676,8 @@ class EnemyShipOne extends Enemy
 						this.removeFromWorld = true
 						this.game.score += @points
 						this.game.current_enemy_displayed -= 1
-						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
+						this.game.addEntity(new GeneralExplosion(this.game, this.ctx, entity.x, entity.y,  ASSET_MANAGER.getAsset('images/explosion_c.png')))
+						this.game.addEntity(new AnimatePoints(@game, @ctx, this))
 					else
 						this.game.addEntity(new NonLethalExplosion(this.game, this.ctx, entity.x, entity.y))
 		if entity instanceof Ship
@@ -670,7 +716,8 @@ class EnemyManager
 		#console.log @current_enemy_count + "    " + @level_manager.current_level.enemy_count
 		if @lastEnemyAddedAt = null or (@game.timer.gameTime - @lastEnemyAddedAt) > 1
 			if Math.random() < 1/@game.level_manager.current_level.speed
-				check = (Math.floor(Math.random()*10)) % 3
+				randomNumber = Math.floor(Math.random()*100)
+				check = randomNumber % 3
 				enemy = null
 				if check is 0
 					enemy = new AsteroidSmall(@game, @ctx, speed_multiplier)
@@ -683,7 +730,10 @@ class EnemyManager
 				@game.stats.enemies_seen += 1
 				@game.current_enemy_count += 1
 				@game.current_enemy_displayed += 1
-				
+				if randomNumber is 99
+					@game.addEntity(new PowerUpLife(@game, @ctx, 1))
+		
+		
 #
 # --------------------------------- Ship -------------------------------------------
 #
@@ -709,15 +759,15 @@ class Ship extends VisualEntity
 		$("#module_info_#{moduleNumber}").html("#{weapon.description}")
 		
 	setLocation: (x, y, z) ->
-		@x = x
-		@y = y
+		@x = x - @width / 2
+		@y = y #+ @height / 2
 		@z = z
 		
 	shoot: (x, y, angle) ->
 		if @weaponModuleOne?
-			@weaponModuleOne.shoot(x + @width/2, y + @height/2, angle)
+			@weaponModuleOne.shoot(x , y, angle)
 		if @weaponModuleTwo?
-			@weaponModuleTwo.shoot(x + @width/2, y + @height/2, angle)
+			@weaponModuleTwo.shoot(x , y, angle)
 	
 	hit: (entity) ->
 		if entity instanceof Bullet 
@@ -737,6 +787,34 @@ class Ship extends VisualEntity
 		#ctx.drawImage(@sprite, @x - @width/2, @y - @height/2)
 		ctx.drawImage(@sprite, @x, @y)
 		super
+
+#
+# --------------------------------- PowerUpLife -------------------------------------------
+#
+class PowerUpLife extends VisualEntity
+	constructor: (@game, @ctx, @lives = 1) ->
+		@speed = 7
+		@x = Math.random() * (@ctx.canvas.width - 25)
+		super
+	
+	hit: (entity) ->
+		if entity instanceof Ship
+			@game.lives += @lives
+			@removeFromWorld = true
+	
+	update: ->
+		if this.outsideScreen()
+			this.active = false
+			this.removeFromWorld = true
+		else
+			@y += @speed
+		super
+		
+	draw: ->
+		@ctx.fillStyle = "yellow"
+		@ctx.fillText("+#{@lives}", @x, @y)
+		super
+
 #
 # --------------------------------- Weapon -------------------------------------------
 #
@@ -792,11 +870,11 @@ class PowerLaser extends Weapon
 	
 	shotFired: (x, y, angle) ->
 		b = new Bullet(@game, @ctx, x, y, angle)
-		b.color = "#C40E20"
+		b.color = "#FF3F0A"
 		b.damage = 3
 		b.speed = 3
 		b.width = 4
-		b.height = 10
+		b.height = 17
 		b
 
 	shoot: (x, y, angle) ->
@@ -1049,7 +1127,7 @@ class LevelFour extends Level
 		super
 	
 	title: "Level 4 Get Ready!"
-	speed: 10
+	speed: 20
 	
 	init: ->
 		#@game.player.ship.weapons.push(new SideLaser(@game, @ctx))
@@ -1058,11 +1136,11 @@ class LevelFour extends Level
 class LevelFive extends Level
 	constructor: (@game, @ctx, @image) ->
 		@enemy_count = 500
-		@enemy_speed_multiplier = 2.5
+		@enemy_speed_multiplier = 2.2
 		super
 	
 	title: "Level 5: Insanity"
-	speed: 20
+	speed: 30
 	
 	init: ->
 
@@ -1241,8 +1319,8 @@ class HtmlInterface
 	constructor: ->
 	
 	initialize: ->
-		$("#module_1").html('<select id="module_select_1"><option value="1" selected="selected">Laser</option><option value="2">Power Laser</option>')
-		$("#module_2").html('<select id="module_select_2"><option value="1" selected="selected">Double Laser</option><option value="2">Side Laser</option><option value="3">Energy Shot</option>')
+		$("module_select_1").val("1")
+		$("module_select_2").val("1")
 #
 # --------------------------------- MyShooter --------------------------------
 #
@@ -1387,14 +1465,15 @@ COLLISION = null
 game = null
 ctx = null
 
+$("#module_1").html('<select id="module_select_1"><option value="1" selected="selected">Laser</option><option value="2">Power Laser</option>')
+$("#module_2").html('<select id="module_select_2"><option value="1" selected="selected">Double Laser</option><option value="2">Side Laser</option><option value="3">Energy Shot</option>')
+		
 try
 	$ ->
-		
 		
 		canvas = $("#surface")
 		ctx = canvas.get(0).getContext("2d")
 	
-		
 		game = new MyShooter #GameEngine
 		ASSET_MANAGER = new AssetManager()
 		ASSET_MANAGER.queueDownload("images/asteroid.png")
@@ -1402,6 +1481,7 @@ try
 		ASSET_MANAGER.queueDownload("images/explosion.png")
 		ASSET_MANAGER.queueDownload("images/explosion_a.png")
 		ASSET_MANAGER.queueDownload("images/explosion_c.png")
+		#ASSET_MANAGER.queueDownload("images/explosion_d.png")
 		ASSET_MANAGER.queueDownload("images/ship1.png")
 		#ASSET_MANAGER.queueDownload("images/space1.jpg")
 		#ASSET_MANAGER.queueDownload("images/space2.jpg")
