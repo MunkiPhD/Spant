@@ -1,7 +1,7 @@
 console.log "at the top"
 
 $ = jQuery
-DEBUG = true
+DEBUG = false # this creates a green box stroke around entities so that it is easier to debug hit detection
 
 
 #
@@ -519,6 +519,7 @@ class Enemy extends VisualEntity
 						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
 					else
 						this.game.addEntity(new NonLethalExplosion(this.game, this.ctx, entity.x, entity.y))
+		###
 			if entity instanceof Ship and this.collisionDetected(entity)
 				#alert "collision detected"
 				if @removeFromWorld is false
@@ -527,6 +528,7 @@ class Enemy extends VisualEntity
 				this.game.addEntity(new ShipExplosion(this.game, this.ctx, entity.x, entity.y)) # an explosion for hitting the ship
 				this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y)) # and an explosion for the asteroid destroyed
 				this.game.lives -= 1
+		###
 			
 	collisionDetected: (bullet) ->
 		# If a's bottom right x coordinate is less than b's top left x coordinate
@@ -600,11 +602,11 @@ class AsteroidLarge extends Enemy
 #
 class EnemyShipOne extends Enemy
 	constructor: (@game, @ctx) ->
-		@speed = 1
+		@speed = 1 + (Math.random() * 2)
 		@sprite = this.cache(ASSET_MANAGER.getAsset("images/enemy_one.png"))
 		@hp = 3
 		@points = 5
-		@lastTimeFiredShot = @game.timer.gameTime + 0.25
+		@lastTimeFiredShot = @game.timer.gameTime + 0.1
 		super
 		
 	lastTimeFiredShot: null
@@ -623,7 +625,7 @@ class EnemyShipOne extends Enemy
 		#@x =  2 * Math.tan(@y)
 		if @lastTimeFiredShot is null or (@game.timer.gameTime - @lastTimeFiredShot) > 1
 			@game.entities.push(@shotFired(@x + @sprite.width / 2, @y+@sprite.height+12, 0)) 
-			@lastTimeFiredShot = @game.timer.gameTime + 1
+			@lastTimeFiredShot = @game.timer.gameTime + Math.random() * 2
 		super
 		
 	draw: ->
@@ -686,9 +688,9 @@ class Ship extends VisualEntity
 		
 	shoot: (x, y, angle) ->
 		if @weaponModuleOne?
-			@weaponModuleOne.shoot(x + @width/2, y - @height/2, angle)
+			@weaponModuleOne.shoot(x + @width/2, y + @height/2, angle)
 		if @weaponModuleTwo?
-			@weaponModuleTwo.shoot(x + @width/2, y - @height/2, angle)
+			@weaponModuleTwo.shoot(x + @width/2, y + @height/2, angle)
 	
 	update: ->
 		try
@@ -700,7 +702,7 @@ class Ship extends VisualEntity
 						@game.lives -= entity.damage
 						@game.entities.push(new ShipExplosion(@game, @ctx, @lastMouseX, @lastMouseY))
 				if entity instanceof Enemy
-					if entity.enemyFired and COLLISION.detected(this, entity)
+					if COLLISION.detected(this, entity)
 						if entity.removeFromWorld is false
 							entity.removeFromWorld = true
 							@game.current_enemy_displayed -= 1
@@ -979,7 +981,7 @@ class LevelOne extends Level
 
 	init: ->
 		$("#module_select_1").attr('disabled', 'disabled')
-		#$("#module_select_2").attr('disabled', 'disabled')
+		$("#module_select_2").attr('disabled', 'disabled')
 		console.log "Should have disabled..."
 		super
 		
@@ -1215,6 +1217,12 @@ class GameEngine
 		this.debug_stats.update()
 		#this.stats.update()	
 
+class HtmlInterface
+	constructor: ->
+	
+	initialize: ->
+		$("#module_1").html('<select id="module_select_1"><option value="1" selected="selected">Laser</option><option value="2">Power Laser</option>')
+		$("#module_2").html('<select id="module_select_2"><option value="1" selected="selected">Double Laser</option><option value="2">Side Laser</option><option value="3">Energy Shot</option>')
 #
 # --------------------------------- MyShooter --------------------------------
 #
@@ -1230,6 +1238,7 @@ class MyShooter extends GameEngine
 	enemy_manager: null
 	enemies_missed: 0
 	enemies_missed_points: 0
+	htmlGui: null
 	
 	pregameSetup: ->
 		this.is_paused = false
@@ -1240,9 +1249,13 @@ class MyShooter extends GameEngine
 		this.current_enemy_count = 0
 		this.current_enemy_displayed = 0
 		this.stats = new GameStats()
+		
+		# setup the Html Gui section
+		@htmlGui = new HtmlInterface()
+		@htmlGui.initialize()
+		
 		# Load images
 		@background = new BackgroundEntity(this, this.ctx, ASSET_MANAGER.getAsset("images/black_space.jpg"))
-		#backgroundOne.draw()
 		this.entities.push(@background)
 		
 		# Entities
@@ -1347,16 +1360,14 @@ COLLISION = null
 game = null
 ctx = null
 
-
 try
 	$ ->
-		$("#module_1").html('<select id="module_select_1"><option value="1" selected="selected">Laser</option><option value="2">Power Laser</option><option value="3">Energy Shot</option>')
-		$("#module_2").html('<select id="module_select_2"><option value="1" selected="selected">Double Laser</option><option value="2">Side Laser</option>')
+		
 		
 		canvas = $("#surface")
 		ctx = canvas.get(0).getContext("2d")
 	
-	
+		
 		game = new MyShooter #GameEngine
 		ASSET_MANAGER = new AssetManager()
 		ASSET_MANAGER.queueDownload("images/asteroid.png")
@@ -1391,7 +1402,7 @@ $("#module_select_1").change ->
 	switch $(this).val()
 		when "1" then game.player.ship.setModule(1, new Laser(game, ctx))
 		when "2" then game.player.ship.setModule(1, new PowerLaser(game, ctx))
-		when "3" then game.player.ship.setModule(1, new EnergyShot(game, ctx))
+		#when "3" then game.player.ship.setModule(1, new EnergyShot(game, ctx))
 		
 $("#module_select_2").change ->
 	#alert "changed"
@@ -1399,5 +1410,5 @@ $("#module_select_2").change ->
 	switch $(this).val()
 		when "1" then game.player.ship.setModule(2, new DoubleLaser(game, ctx))
 		when "2" then game.player.ship.setModule(2, new SideLaser(game, ctx))
-		when "3" then game.player.ship.setModule(1, new EnergyShot(game, ctx))
+		when "3" then game.player.ship.setModule(2, new EnergyShot(game, ctx))
 		
