@@ -1,7 +1,7 @@
 console.log "at the top"
 
 $ = jQuery
-DEBUG = false # this creates a green box stroke around entities so that it is easier to debug hit detection
+DEBUG = true # this creates a green box stroke around entities so that it is easier to debug hit detection
 
 
 #
@@ -217,7 +217,9 @@ class VisualEntity extends Entity
 	height: 0
 	zindex: 0
 	
-	
+	hit: (entity) ->
+		#console.log "One hit is unhandled"
+		
 	draw: ->
 		if DEBUG is true
 			@ctx.strokeStyle = "green"
@@ -323,6 +325,12 @@ class Bullet extends VisualEntity
 	
 	getRadians: (degrees) ->
 		degrees * (Math.PI/180)
+		
+	hit: (entity) ->
+		if entity instanceof Enemy and @enemyFired is false
+			if @removeFromWorld is false
+					@removeFromWorld = true # remove the bullet from the world
+			
 		
 	update: ->
 		if this.outsideScreen()
@@ -494,6 +502,8 @@ class Enemy extends VisualEntity
 	sprite: null
 	points: 1
 	
+	
+	
 	update: ->
 		if this.outsideScreen()
 			this.active = false
@@ -505,8 +515,9 @@ class Enemy extends VisualEntity
 			# alert "decreasing enemy displayed by 1 in Enemy Update A, is now #{@game.current_enemy_displayed}"
 		else
 			@y += @speed
+		###
 		for entity in game.entities
-			if entity instanceof Bullet and this.collisionDetected(entity)
+			if entity instanceof Bullet and COLLISION.detected(this, entity)
 				#make sure that the entities aren't slated to be removed from the world yet before we perform the necessary actions
 				if @removeFromWorld is false and entity.removeFromWorld is false
 					@hp = @hp - entity.damage # subtract the bullet damage from the current enemy's HP
@@ -520,37 +531,8 @@ class Enemy extends VisualEntity
 					else
 						this.game.addEntity(new NonLethalExplosion(this.game, this.ctx, entity.x, entity.y))
 		###
-			if entity instanceof Ship and this.collisionDetected(entity)
-				#alert "collision detected"
-				if @removeFromWorld is false
-					this.removeFromWorld = true
-					this.game.current_enemy_displayed -= 1
-				this.game.addEntity(new ShipExplosion(this.game, this.ctx, entity.x, entity.y)) # an explosion for hitting the ship
-				this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y)) # and an explosion for the asteroid destroyed
-				this.game.lives -= 1
-		###
-			
-	collisionDetected: (bullet) ->
-		# If a's bottom right x coordinate is less than b's top left x coordinate
-		#	 There is no collision
-		# If a's top left x is greater than b's bottom right x
-		#    There is no collision
-		# If a's top left y is greater than b's bottom right y
-		#    There is no collision
-		# If a's bottom right y is less than b's top left y
-		#    There is no collision
-		if (this.x + this.width) <= (bullet.x)
-			return false
-		if (this.x) >= (bullet.x + bullet.width)
-			return false
-		if (this.y) >= (bullet.y + bullet.height)
-			return false
-		if (this.y + this.height) <= (bullet.y)
-			return false
-		# console.log "Item is at: [#{this.x}, #{this.y}] [#{this.x + this.width}.#{this.y + this.height}] 
-		# || Bullet is at: [#{bullet.x}, #{bullet.y}] [#{bullet.x + bullet.width}.#{bullet.y + bullet.height} ]"
-		return true
-			
+		super
+
 	draw: ->
 		try
 			@ctx.save()
@@ -574,6 +556,21 @@ class AsteroidSmall extends Enemy
 		@points = 1
 		super
 	
+	hit: (entity) ->
+		if entity instanceof Bullet
+			if @removeFromWorld is false
+					@hp = @hp - entity.damage # subtract the bullet damage from the current enemy's HP
+					if @hp <= 0
+						this.removeFromWorld = true
+						this.game.score += @points
+						this.game.current_enemy_displayed -= 1
+						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
+					else
+						this.game.addEntity(new NonLethalExplosion(this.game, this.ctx, entity.x, entity.y))
+		if entity instanceof Ship
+			@removeFromWorld = true
+			@game.current_enemy_displayed -= 1
+			
 	update: ->
 		super
 
@@ -591,6 +588,21 @@ class AsteroidLarge extends Enemy
 		@hp = 2
 		@points = 2
 		super
+	
+	hit: (entity) ->
+		if entity instanceof Bullet
+			if @removeFromWorld is false
+					@hp = @hp - entity.damage # subtract the bullet damage from the current enemy's HP
+					if @hp <= 0
+						this.removeFromWorld = true
+						this.game.score += @points
+						this.game.current_enemy_displayed -= 1
+						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
+					else
+						this.game.addEntity(new NonLethalExplosion(this.game, this.ctx, entity.x, entity.y))
+		if entity instanceof Ship
+			@removeFromWorld = true
+			@game.current_enemy_displayed -= 1
 	
 	update: ->
 		super
@@ -611,6 +623,22 @@ class EnemyShipOne extends Enemy
 		
 	lastTimeFiredShot: null
 	
+	hit: (entity) ->
+		if entity instanceof Bullet
+			if @removeFromWorld is false
+					@hp = @hp - entity.damage # subtract the bullet damage from the current enemy's HP
+					if @hp <= 0
+						this.removeFromWorld = true
+						this.game.score += @points
+						this.game.current_enemy_displayed -= 1
+						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y))
+					else
+						this.game.addEntity(new NonLethalExplosion(this.game, this.ctx, entity.x, entity.y))
+		if entity instanceof Ship
+			@removeFromWorld = true
+			@game.current_enemy_displayed -= 1
+	
+	
 	shotFired: (x, y, angle) ->
 		b = new Bullet(@game, @ctx, x, y, angle)
 		b.damage = 1
@@ -622,7 +650,6 @@ class EnemyShipOne extends Enemy
 		b
 		
 	update: ->
-		#@x =  2 * Math.tan(@y)
 		if @lastTimeFiredShot is null or (@game.timer.gameTime - @lastTimeFiredShot) > 1
 			@game.entities.push(@shotFired(@x + @sprite.width / 2, @y+@sprite.height+12, 0)) 
 			@lastTimeFiredShot = @game.timer.gameTime + Math.random() * 2
@@ -692,26 +719,19 @@ class Ship extends VisualEntity
 		if @weaponModuleTwo?
 			@weaponModuleTwo.shoot(x + @width/2, y + @height/2, angle)
 	
-	update: ->
-		try
-			for entity in @game.entities
-				if entity instanceof Bullet 
-					if entity.enemyFired and COLLISION.detected(this, entity)
-						entity.removeFromWorld = true
-						console.log "Lives: #{@game.lives} Damage: #{entity.damage}"
-						@game.lives -= entity.damage
-						@game.entities.push(new ShipExplosion(@game, @ctx, @lastMouseX, @lastMouseY))
-				if entity instanceof Enemy
-					if COLLISION.detected(this, entity)
-						if entity.removeFromWorld is false
-							entity.removeFromWorld = true
-							@game.current_enemy_displayed -= 1
-						this.game.addEntity(new ShipExplosion(this.game, this.ctx, @x + @width/2, @y - @height/2)) # an explosion for hitting the ship
-						this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y)) # and an explosion for the asteroid destroyed
-						this.game.lives -= 1
-		catch e
-			console.log e
-		super
+	hit: (entity) ->
+		if entity instanceof Bullet 
+			if entity.enemyFired
+				entity.removeFromWorld = true
+				console.log "Lives: #{@game.lives} Damage: #{entity.damage}"
+				@game.lives -= entity.damage
+				@game.entities.push(new ShipExplosion(@game, @ctx, @lastMouseX, @lastMouseY))
+		if entity instanceof Enemy
+			@game.current_enemy_displayed -= 1
+			this.game.addEntity(new ShipExplosion(this.game, this.ctx, @x + @width/2, @y - @height/2)) # an explosion for hitting the ship
+			this.game.addEntity(new BulletExplosion(this.game, this.ctx, entity.x, entity.y)) # and an explosion for the asteroid destroyed
+			this.game.lives -= 1
+	
 		
 	draw: ->
 		#ctx.drawImage(@sprite, @x - @width/2, @y - @height/2)
@@ -1276,6 +1296,13 @@ class MyShooter extends GameEngine
 		super
 		
 	update: ->
+		for entity in game.entities
+			for checkEntity in game.entities
+				if entity isnt checkEntity and entity.removeFromWorld is false and checkEntity.removeFromWorld is false
+					if COLLISION.detected(entity, checkEntity)
+						entity.hit(checkEntity)
+						checkEntity.hit(entity)
+						
 		if this.lives <= 0 or @game_over
 			$("#surface").css("cursor", "crosshair")
 			for entity in this.entities
