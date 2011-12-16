@@ -311,12 +311,10 @@ class GameStats
 	enemies_seen: 0
 
 #
-# --------------------------------- Animate Points ---------------------------------------------
+# --------------------------------- Animate Text ---------------------------------------------
 #
-class AnimatePoints extends Entity
-	constructor: (@game, @ctx, @entity, @color = "#50FF0A") ->
-		@x = @entity.x + @entity.width / 2
-		@y = @entity.y + @entity.height / 2
+class AnimateText extends Entity
+	constructor: (@game, @ctx, @x, @y, @text, @color = "#50FF0A") ->
 		super
 	
 	counter: 0
@@ -336,8 +334,19 @@ class AnimatePoints extends Entity
 	draw: ->
 		this.ctx.fillStyle = @color
 		this.ctx.font = "bold 14px Verdana"
-		this.ctx.fillText("+#{@entity.points}",  @x, @y)
+		this.ctx.fillText("#{@text}",  @x, @y)
 		super
+		
+#
+# --------------------------------- Animate Points ---------------------------------------------
+#
+class AnimatePoints extends AnimateText
+	constructor: (@game, @ctx, @entity, @color = "#50FF0A") ->
+		@x = @entity.x + @entity.width / 2
+		@y = @entity.y + @entity.height / 2
+		@text = "+#{@entity.points}"
+		super @game, @ctx, @x, @y, @text, @color
+	
 #
 # --------------------------------- Bullet ---------------------------------------------
 #
@@ -730,7 +739,7 @@ class EnemyManager
 				@game.stats.enemies_seen += 1
 				@game.current_enemy_count += 1
 				@game.current_enemy_displayed += 1
-				if randomNumber is 99
+				if randomNumber > 95
 					@game.addEntity(new PowerUpLife(@game, @ctx, 1))
 		
 		
@@ -801,6 +810,7 @@ class PowerUpLife extends VisualEntity
 		if entity instanceof Ship
 			@game.lives += @lives
 			@removeFromWorld = true
+			@game.entities.push(new AnimateText(@game, @ctx, entity.x + entity.width / 2, entity.y, "+#{@lives} lives"))
 	
 	update: ->
 		if this.outsideScreen()
