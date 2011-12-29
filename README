@@ -1,0 +1,15 @@
+This is my first attempt at:
+ a game
+ a game in canvas
+ a game in canvas with CoffeeScript as the backend
+
+It's a simple gallaga style shooter with most of the engine ripped from Seth Ladd's Bad Aliens demo he did.
+
+Internal Workings:
+- Most everything extends the Entity Class which is ticked inside the game engine.
+- Hit detection is handled by each entity so that they can choose what other entities they want to interact with
+  * makes it extremely modular
+- Enemies are determined at random and are emplaced by the levels themselves
+- I have no grasp on level, level management, and inter-level state (scrore screens, etc)
+
+WARNING: The code isn't the best - it was more of a learning experience and a stepping stone into game development.
